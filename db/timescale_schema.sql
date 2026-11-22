@@ -170,3 +170,12 @@ SELECT add_continuous_aggregate_policy('user_minigame_accuracy_weekly',
   end_offset => INTERVAL '1 hour',
   schedule_interval => INTERVAL '1 hour',
   if_not_exists => TRUE);
+
+-- One row per daily kid-safety run. The summary stays free of clinical wording.
+CREATE TABLE IF NOT EXISTS safety_recaps (
+  id TEXT PRIMARY KEY,
+  run_date TEXT NOT NULL,
+  passed BOOLEAN NOT NULL,
+  summary TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL
+);

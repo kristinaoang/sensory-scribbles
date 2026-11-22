@@ -12,7 +12,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "narration": "tsx scripts/generate-narration.ts",
-    "test:guide": "tsx scripts/test-guide.ts"
+    "test:guide": "tsx scripts/test-guide.ts",
+    "safety:daily": "tsx scripts/daily-safety-check.ts"
   },
   "dependencies": {
     "@google/genai": "^3.6.1",

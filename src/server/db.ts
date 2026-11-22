@@ -1883,18 +1883,46 @@ export async function setCampusWanderChoice(roomId: string, userId: string, plac
     .run(roomId, userId, placeId, now);
 }
 
-export async function listTodayEntrySentences(day: string): Promise<string[]> {
+export async function listTodayDemoSentences(day: string): Promise<string[]> {
   if (USE_POSTGRES) {
     const { rows } = await getPg().query(
-      `SELECT sentence FROM entries WHERE entry_date = $1::date AND flagged = FALSE ORDER BY created_at ASC`,
+      `SELECT sentence FROM entries WHERE entry_date = $1::date AND is_demo = TRUE ORDER BY created_at ASC`,
       [day],
     );
     return rows.map((row) => String(row.sentence || ''));
   }
   const rows = getSqlite()
-    .prepare(`SELECT sentence FROM entries WHERE entry_date = ? AND flagged = 0 ORDER BY created_at ASC`)
+    .prepare(`SELECT sentence FROM entries WHERE entry_date = ? AND is_demo = 1 ORDER BY created_at ASC`)
     .all(day) as Array<{ sentence: string }>;
   return rows.map((row) => String(row.sentence || ''));
+}
+
+export async function latestEntryPrompt(userId: string, roomId: string): Promise<string | null> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT p.text AS prompt_text
+       FROM entries e
+       LEFT JOIN prompts p ON p.id = e.prompt_id
+       WHERE e.user_id = $1 AND e.room_id = $2 AND e.flagged = FALSE
+       ORDER BY e.created_at DESC
+       LIMIT 1`,
+      [userId, roomId],
+    );
+    const text = rows[0]?.prompt_text ? String(rows[0].prompt_text).trim() : '';
+    return text || null;
+  }
+  const row = getSqlite()
+    .prepare(
+      `SELECT p.text AS prompt_text
+       FROM entries e
+       LEFT JOIN prompts p ON p.id = e.prompt_id
+       WHERE e.user_id = ? AND e.room_id = ? AND e.flagged = 0
+       ORDER BY e.created_at DESC
+       LIMIT 1`,
+    )
+    .get(userId, roomId) as { prompt_text?: string } | undefined;
+  const text = row?.prompt_text ? String(row.prompt_text).trim() : '';
+  return text || null;
 }
 
 export async function latestEntrySentence(userId: string, roomId: string): Promise<string | null> {

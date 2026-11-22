@@ -828,42 +828,29 @@ async function startServer() {
     }
   });
 
-  app.get('/api/parent/recap', async (req, res) => {
+  app.get('/api/parent/recap', async (_req, res) => {
     try {
-      const userId = String(req.query.userId || '');
-      const roomCode = String(req.query.roomCode || 'CEDAR-402').trim().toUpperCase();
-      const room = await getRoomByCode(roomCode);
-      if (!userId || !room) {
-        res.status(400).json({ error: 'A room and child are required.' });
-        return;
-      }
-      const text = await buildParentRecap(userId, room.id);
-      const mail = mailSettings();
-      res.json({ text, mailConfigured: mail.configured });
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message || 'Failed to build the recap.' });
+      const text = await buildParentRecap();
+      res.json({ text, mailConfigured: mailSettings().configured });
+    } catch {
+      res.status(500).json({ error: 'Failed to build the recap.' });
     }
   });
 
-  app.post('/api/parent/email', async (req, res) => {
+  app.post('/api/parent/email', async (_req, res) => {
     try {
-      const userId = String(req.body?.userId || '');
-      const roomCode = String(req.body?.roomCode || 'CEDAR-402').trim().toUpperCase();
-      const room = await getRoomByCode(roomCode);
-      if (!userId || !room) {
-        res.status(400).json({ error: 'A room and child are required.' });
-        return;
-      }
-      const mail = mailSettings();
-      if (!mail.configured) {
+      if (!mailSettings().configured) {
         res.status(200).json({ sent: false, configured: false, message: 'mail is not configured' });
         return;
       }
-      const text = await buildParentRecap(userId, room.id);
-      const result = await sendParentRecap(text);
-      res.status(result.sent ? 200 : 502).json(result);
-    } catch (err: any) {
-      res.status(500).json({ sent: false, configured: true, message: err?.message || 'The recap was not sent.' });
+      const result = await sendParentRecap(await buildParentRecap());
+      res.status(result.sent ? 200 : 502).json({
+        sent: result.sent,
+        configured: result.configured,
+        message: result.message,
+      });
+    } catch {
+      res.status(500).json({ sent: false, configured: true, message: 'The recap was not sent.' });
     }
   });
 
@@ -1011,7 +998,13 @@ async function startServer() {
         return;
       }
       const report = await runMastraNightlyWorkflow(roomId, date);
-      res.status(report.ok ? 200 : 422).json(report);
+      let safety: { passed: boolean; summary: string; runDate: string } | null = null;
+      try {
+        safety = await runDailySafetyCheck(date);
+      } catch {
+        safety = null;
+      }
+      res.status(report.ok ? 200 : 422).json({ ...report, safety });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Nightly workflow error.' });
     }

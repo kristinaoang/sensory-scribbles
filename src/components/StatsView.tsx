@@ -36,7 +36,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
       .finally(() => {
         if (active) setLoading(false);
       });
-    fetch(`/api/parent/recap?userId=${encodeURIComponent(userId)}&roomCode=${encodeURIComponent(roomCode)}`)
+    fetch('/api/parent/recap')
       .then((r) => r.json())
       .then((data) => {
         if (!active) return;
@@ -56,7 +56,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
     fetch('/api/parent/email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, roomCode }),
+      body: '{}',
     })
       .then((r) => r.json())
       .then((data) => {
@@ -98,6 +98,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
+            data-testid="email-parent-recap"
             onClick={sendRecap}
             disabled={sending}
             className="min-h-[40px] px-4 py-1.5 rounded-full bg-[#F7C6CF] hover:bg-[#F2B1BE] text-[#43202A] text-sm font-bold disabled:opacity-60"
@@ -105,7 +106,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
             Email parent recap
           </button>
           {mailNote && (
-            <p className="text-sm text-[#4C5568] dark:text-[#CBD5EB]" role="status">
+            <p className="text-sm text-[#4C5568] dark:text-[#CBD5EB]" role="status" data-testid="parent-mail-status">
               {mailNote}
             </p>
           )}

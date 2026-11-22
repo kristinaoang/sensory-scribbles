@@ -2,22 +2,29 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { containsBanned } from './guideSafety';
-import { latestSafetyRecap, listTodayEntrySentences, saveSafetyRecap } from './db';
+import { latestSafetyRecap, listTodayDemoSentences, saveSafetyRecap } from './db';
 
-const EXTRA_BANNED = ['delay', 'at risk', 'benchmark', 'screening'];
+const EXTRA_CLINICAL = ['delay', 'at risk', 'benchmark', 'screening'];
 const EMAIL = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const PHONE = /\b(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/;
-const PERSONAL_NOTE =
-  /\b(my name is|i am \d{1,2}|years old|my address|i live at|my school|phone number|my email)\b/i;
+const ADDRESS =
+  /\b\d{1,5}\s+[A-Za-z0-9.'\s]{2,40}\s+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct|Way|Place|Pl)\b/i;
+const SCHOOL = /\b(?:school|preschool|kindergarten|elementary|classroom|homeroom)\b/i;
+const AGE = /\b(?:\d{1,2}\s*[- ]?years?\s+old|years?\s+old|year[- ]old|age\s*(?:is|:)\s*\d{1,2}|i(?:'m| am)\s+\d{1,2})\b/i;
+const NAME = /\b(?:my name is|i am named|i'm named)\s+[A-Za-z][a-z]{1,24}\b/;
 
-function hasBlockedLanguage(text: string): boolean {
-  if (containsBanned(text)) return true;
-  const lower = text.toLowerCase();
-  return EXTRA_BANNED.some((phrase) => lower.includes(phrase));
+function phraseHits(text: string, phrase: string): boolean {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`\\b${escaped}\\b`, 'i').test(text);
 }
 
-function hasPersonalData(text: string): boolean {
-  return EMAIL.test(text) || PHONE.test(text) || PERSONAL_NOTE.test(text);
+export function textHasClinicalLanguage(text: string): boolean {
+  if (containsBanned(text)) return true;
+  return EXTRA_CLINICAL.some((phrase) => phraseHits(text, phrase));
+}
+
+export function noteHasPersonalData(text: string): boolean {
+  return EMAIL.test(text) || PHONE.test(text) || ADDRESS.test(text) || SCHOOL.test(text) || AGE.test(text) || NAME.test(text);
 }
 
 function readPublicCopy(): string[] {
@@ -41,19 +48,24 @@ function readPublicCopy(): string[] {
   return chunks;
 }
 
+function reasonLine(pageProblem: boolean, noteProblem: boolean): string {
+  if (!pageProblem && !noteProblem) return 'Pass. Public pages and today\'s demo notes are clear.';
+  if (pageProblem && noteProblem) return 'Fail. A public page needs a rewrite, and a demo note needs to come out.';
+  if (pageProblem) return 'Fail. A public page needs a rewrite.';
+  return 'Fail. A demo note needs to come out.';
+}
+
 export async function runDailySafetyCheck(day = new Date().toISOString().slice(0, 10)): Promise<{
   passed: boolean;
   summary: string;
   runDate: string;
 }> {
-  const notes = await listTodayEntrySentences(day);
+  const notes = await listTodayDemoSentences(day);
   const pages = readPublicCopy();
-  const pageProblem = pages.some((text) => hasBlockedLanguage(text));
-  const noteProblem = notes.some((text) => hasBlockedLanguage(text) || hasPersonalData(text));
+  const pageProblem = pages.some((text) => textHasClinicalLanguage(text));
+  const noteProblem = notes.some((text) => textHasClinicalLanguage(text) || noteHasPersonalData(text));
   const passed = !pageProblem && !noteProblem;
-  const summary = passed
-    ? `Pass. Public pages and ${notes.length} note${notes.length === 1 ? '' : 's'} from ${day} stayed clear.`
-    : `Fail. ${pageProblem ? 'A public page needs a rewrite. ' : ''}${noteProblem ? 'A note from today needs to come out.' : ''}`.trim();
+  const summary = reasonLine(pageProblem, noteProblem);
   await saveSafetyRecap({
     id: crypto.randomUUID(),
     runDate: day,
