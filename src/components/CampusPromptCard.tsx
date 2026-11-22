@@ -37,6 +37,14 @@ export const CampusPromptCard: React.FC<CampusPromptCardProps> = ({
   onAnswer,
 }) => {
   const [ideas, setIdeas] = useState<string[]>(CANNED_IDEAS);
+  const [tucked, setTucked] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('ss-quest-tucked') === '1';
+    } catch {
+      return false;
+    }
+  });
   const safeTarget = Math.max(1, progressTarget);
   const shown = Math.max(0, Math.min(safeTarget, progressCount));
 
@@ -70,6 +78,26 @@ export const CampusPromptCard: React.FC<CampusPromptCardProps> = ({
         className="pointer-events-none absolute left-3 top-3 flex max-w-[min(22rem,calc(100%-10.5rem))] flex-col gap-2 sm:left-4 sm:top-4"
         data-feature-host="campus-journal"
       >
+        <button
+          type="button"
+          data-testid="quest-tab"
+          aria-expanded={!tucked}
+          onClick={() => {
+            setTucked((prev) => {
+              const next = !prev;
+              try {
+                window.localStorage.setItem('ss-quest-tucked', next ? '1' : '0');
+              } catch {
+                /* the tab still works for this visit */
+              }
+              return next;
+            });
+          }}
+          className="pointer-events-auto inline-flex min-h-[44px] w-fit cursor-pointer items-center rounded-full border border-[#E5DEC9] bg-[#F8F4EA] px-4 font-sans text-sm font-bold text-[#1F2A3C] shadow-md"
+        >
+          {tucked ? 'Quest' : 'Hide quest'}
+        </button>
+        {!tucked ? (
         <section
           className="pointer-events-auto rounded-3xl border border-[#E5DEC9] bg-[#F8F4EA]/95 p-4 text-[#1F2A3C] shadow-md dark:border-[#3D4978] dark:bg-[#222A4C]/95 dark:text-slate-100"
           aria-label={`${roomName} prompt`}
@@ -81,7 +109,7 @@ export const CampusPromptCard: React.FC<CampusPromptCardProps> = ({
           <h2 className="mt-0.5 font-display text-lg font-semibold leading-snug text-[#1F2A3C] dark:text-white">
             {roomName}
           </h2>
-          <p className="mt-2 text-sm leading-snug text-[#2B374E] dark:text-[#E2EAFD]">“{prompt}”</p>
+          <p data-testid="campus-prompt" className="mt-2 font-sans text-sm leading-snug text-[#2B374E] dark:text-[#E2EAFD]">“{prompt}”</p>
           {drawingPrompt ? (
             <p className="mt-1 text-[11px] leading-snug text-[#4C5568] dark:text-[#CBD5EB]">
               Draw together: <span className="font-semibold">{drawingPrompt}</span>
@@ -102,13 +130,14 @@ export const CampusPromptCard: React.FC<CampusPromptCardProps> = ({
             <button
               type="button"
               onClick={onAnswer}
-              className="mt-3 inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-full bg-[#F7C6CF] px-3.5 py-1.5 text-xs font-bold text-[#43202A] hover:bg-[#F2B1BE] dark:bg-[#F8E166] dark:text-[#242E47] dark:hover:bg-[#F2D544]"
+              className="mt-3 inline-flex min-h-[40px] w-full cursor-pointer items-center justify-center gap-1.5 rounded-full bg-[#F7C6CF] px-3.5 py-1.5 font-sans text-xs font-bold text-[#43202A] hover:bg-[#F2B1BE] dark:bg-[#F8E166] dark:text-[#242E47] dark:hover:bg-[#F2D544]"
             >
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               Answer &amp; Draw
             </button>
           ) : null}
         </section>
+        ) : null}
 
         {expandedTitle ? (
           <div

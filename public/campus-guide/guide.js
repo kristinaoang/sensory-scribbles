@@ -206,9 +206,6 @@ export async function startCampusGuide({ engine, parentOrigin, userId, roomId })
       /* the clip may still be loading */
     }
     stepAudio.play().catch(() => {});
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ source: "ss-guide", action: "footstep" }, parentOrigin);
-    }
   }
 
   function syncMute() {
