@@ -13,6 +13,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
   const [weeklyAccuracy, setWeeklyAccuracy] = useState<WeeklyAccuracyBucket[]>([]);
   const [dailyCounts, setDailyCounts] = useState<DailyRoomCountBucket[]>([]);
   const [streak, setStreak] = useState<UserRoomStreak | null>(null);
+  const [helpLine, setHelpLine] = useState('Help has not been used yet.');
   const [engineLabel, setEngineLabel] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -26,6 +27,7 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
         setWeeklyAccuracy(Array.isArray(data.weeklyAccuracy) ? data.weeklyAccuracy : []);
         setDailyCounts(Array.isArray(data.dailyRoomCounts) ? data.dailyRoomCounts : []);
         setStreak(data.streak ?? null);
+        setHelpLine(typeof data.helpUsage?.line === 'string' ? data.helpUsage.line : 'Help has not been used yet.');
         setEngineLabel(data.databaseEngine || '');
       })
       .finally(() => {
@@ -60,6 +62,13 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
 
       {/* Room Contribution Streak Counter */}
       <StreakCounter streak={streak} roomCode={roomCode} loading={loading} />
+
+      <p
+        data-testid="help-usage-line"
+        className="rounded-2xl border border-[#E5DEC9] dark:border-[#3D4978] bg-white dark:bg-[#21294A] px-4 py-3 text-sm text-[#1F2A3C] dark:text-slate-100"
+      >
+        {helpLine}
+      </p>
 
       {loading ? (
         <p className="text-sm text-[#555E72] dark:text-[#BDC7E3] py-8">Loading weekly aggregates…</p>

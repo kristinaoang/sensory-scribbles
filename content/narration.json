@@ -1,0 +1,44 @@
+{
+  "lines": [
+    {
+      "id": "welcome",
+      "text": "Welcome to Sensory Scribbles, Wellesley College. Walk around campus, explore, and chill."
+    },
+    {
+      "id": "hint-pet-the-dog",
+      "text": "Head toward the campus dog."
+    },
+    {
+      "id": "hint-watch-the-lake",
+      "text": "Head toward the lake path."
+    },
+    {
+      "id": "hint-look-up-tower",
+      "text": "Head toward the stone tower."
+    },
+    {
+      "id": "quest-pet-the-dog",
+      "text": "Pet the dog?"
+    },
+    {
+      "id": "quest-watch-the-lake",
+      "text": "Watch the lake?"
+    },
+    {
+      "id": "quest-look-up-tower",
+      "text": "Look up at the tower?"
+    },
+    {
+      "id": "prompt-pet-the-dog",
+      "text": "Draw the dog's soft ears and the warm grass under your shoes."
+    },
+    {
+      "id": "prompt-watch-the-lake",
+      "text": "Watch the lake and draw one bright ripple you see."
+    },
+    {
+      "id": "prompt-look-up-tower",
+      "text": "Look up at the tower and write the color of the stone."
+    }
+  ]
+}

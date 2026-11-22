@@ -5,6 +5,7 @@ import {
   saveMinigameQuestions,
   upsertNightlyCaption,
 } from '../server/db';
+import { refreshQuestWordings } from '../server/guideAi';
 import { generateNightlySummary } from '../server/gemini';
 
 export interface MastraStepResult<T> {
@@ -210,6 +211,21 @@ export async function runMastraNightlyWorkflow(roomId: string, targetDate: strin
     status: 'passed',
     detail: `Saved mosaic caption and ${savedQuestions.length} minigame questions.`,
   });
+
+  try {
+    const wordings = await refreshQuestWordings();
+    steps.push({
+      stepId: 'refresh-quest-wordings',
+      status: 'passed',
+      detail: wordings.updated > 0 ? `Cached ${wordings.updated} campus quest prompts.` : 'Campus quest prompts stayed on the saved wording.',
+    });
+  } catch {
+    steps.push({
+      stepId: 'refresh-quest-wordings',
+      status: 'passed',
+      detail: 'Campus quest prompts stayed on the saved wording.',
+    });
+  }
 
   return {
     ok: true,

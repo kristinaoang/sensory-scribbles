@@ -1,0 +1,227 @@
+@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,650&family=Plus+Jakarta+Sans:wght@500;650;700&display=swap");
+
+.ss-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  font-family: "Plus Jakarta Sans", "Avenir Next", system-ui, sans-serif;
+  color: #1f2a3c;
+}
+
+.ss-guide button,
+.ss-guide input {
+  font: inherit;
+}
+
+.ss-card {
+  pointer-events: auto;
+  background: rgba(248, 244, 234, 0.96);
+  border: 1px solid #ddd4bc;
+  border-radius: 22px;
+  box-shadow: 0 12px 32px rgba(31, 42, 60, 0.12);
+}
+
+.ss-enter {
+  pointer-events: auto;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 244, 234, 0.28);
+}
+
+.ss-enter-btn,
+.ss-primary,
+.ss-quiet {
+  pointer-events: auto;
+  min-height: 44px;
+  border-radius: 999px;
+  border: 0;
+  padding: 0 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ss-enter-btn,
+.ss-primary {
+  background: #f7c6cf;
+  color: #43202a;
+}
+
+.ss-quiet {
+  background: #fff;
+  color: #1f2a3c;
+  border: 1px solid #ddd4bc;
+}
+
+.ss-welcome,
+.ss-hint,
+.ss-popup,
+.ss-help-panel,
+.ss-animal,
+.ss-map {
+  pointer-events: auto;
+}
+
+.ss-welcome {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  width: min(440px, calc(100% - 32px));
+  padding: 14px 16px;
+}
+
+.ss-welcome h1,
+.ss-map h2 {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.15rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.ss-popup h2,
+.ss-animal h2,
+.ss-hint,
+.ss-guide button,
+.ss-guide textarea,
+.ss-guide input {
+  font-family: "Plus Jakarta Sans", "Avenir Next", system-ui, sans-serif;
+}
+
+.ss-welcome-text {
+  animation: ss-fade 1.15s ease both;
+}
+
+.ss-instant .ss-welcome-text {
+  animation: none;
+  opacity: 1;
+}
+
+@keyframes ss-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-welcome-text { animation: none; opacity: 1; }
+}
+
+.ss-minimap,
+.ss-help,
+.ss-volume {
+  position: absolute;
+  pointer-events: auto;
+}
+
+.ss-minimap {
+  left: 14px;
+  bottom: 18px;
+  width: 148px;
+  height: 148px;
+  padding: 8px;
+}
+
+.ss-minimap svg,
+.ss-map svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #e7f3df;
+  border-radius: 14px;
+}
+
+.ss-help {
+  right: 14px;
+  bottom: 92px;
+  min-width: 72px;
+}
+
+.ss-volume {
+  right: 110px;
+  bottom: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.ss-volume input { width: 88px; }
+
+.ss-icon-btn,
+.ss-steps-btn {
+  pointer-events: auto;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid #ddd4bc;
+  background: #fff;
+  cursor: pointer;
+  font-family: "Plus Jakarta Sans", "Avenir Next", system-ui, sans-serif;
+}
+
+.ss-icon-btn {
+  width: 40px;
+}
+
+.ss-steps-btn {
+  min-width: 92px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.ss-popup,
+.ss-animal,
+.ss-help-panel {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100% - 28px));
+  padding: 16px;
+}
+
+.ss-help-panel { top: auto; bottom: 148px; right: 14px; left: auto; transform: none; width: min(280px, calc(100% - 28px)); }
+
+.ss-row { display: flex; gap: 8px; margin-top: 12px; }
+.ss-row button { flex: 1; }
+
+.ss-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 78px;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  font-size: 0.92rem;
+  font-weight: 650;
+}
+
+.ss-map {
+  position: absolute;
+  inset: 18px;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+}
+
+.ss-map svg { flex: 1; }
+.ss-map-title {
+  text-align: center;
+  margin: 8px 0 0;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1rem;
+}
+
+.ss-ideas { margin: 8px 0 0; padding-left: 18px; }
+.ss-ideas li { margin: 4px 0; }
+.ss-animal textarea {
+  width: 100%;
+  min-height: 64px;
+  border-radius: 14px;
+  border: 1px solid #ddd4bc;
+  padding: 8px;
+  resize: vertical;
+  background: #fff;
+}
+.ss-reply { margin-top: 8px; font-weight: 650; }
