@@ -735,14 +735,14 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
 
       const trimmedPrev = reflectionRef.current.trimEnd();
       const combined = trimmedPrev ? `${trimmedPrev} ${transcript}` : transcript;
-      const wasTruncated = combined.length > 140;
-      const nextReflection = wasTruncated ? combined.slice(0, 140) : combined;
+      const wasTruncated = combined.length > 500;
+      const nextReflection = wasTruncated ? combined.slice(0, 500) : combined;
       setReflection(nextReflection);
 
       setFeedback({
         type: 'success',
         text: wasTruncated
-          ? 'Spoken answer transcribed and fitted to the 140-character limit.'
+          ? 'Spoken answer transcribed and fitted to the 500-character limit.'
           : 'Spoken answer transcribed into the text box—draw or edit before adding your stroke.',
       });
       reflectionInputRef.current?.focus();
@@ -900,7 +900,7 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
     setFeedback(null);
     const trimmed = reflection.trim();
     if (!trimmed) {
-      setFeedback({ type: 'error', text: 'Write your answer to the question (up to 140 characters) so it becomes your stroke.' });
+      setFeedback({ type: 'error', text: 'Write your answer to the question (up to 500 characters) so it becomes your stroke.' });
       return;
     }
     if (draftPoints.length < 2) {
@@ -1469,7 +1469,7 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
               Your Answer (curves along your brushstroke on the shared canvas &amp; grows the 3D world)
             </label>
             <span className="text-xs font-mono-tabular text-[#555E72] dark:text-[#BDC7E3]">
-              {reflection.length}/140 · {draftPoints.length >= 2 ? 'Stroke ready' : 'Draw on canvas above'}
+              {reflection.length}/500 · {draftPoints.length >= 2 ? 'Stroke ready' : 'Draw on canvas above'}
             </span>
           </div>
 
@@ -1480,7 +1480,7 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
                 id="shared-reflection-input"
                 data-testid="daily-sentence-input"
                 type="text"
-                maxLength={140}
+                maxLength={500}
                 value={reflection}
                 onChange={(e) => setReflection(e.target.value)}
                 placeholder="Write or speak your answer (e.g. A yellow armchair and sun on the rug)..."

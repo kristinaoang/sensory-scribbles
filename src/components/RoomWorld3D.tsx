@@ -393,18 +393,16 @@ function buildEntryPlotMesh(
 }
 
 function getPlotCoordinate(index: number, level: number): { x: number; z: number } {
-  // Keep central campfire hearth and Stage 1 Shared Canvas Board clear
+  // Keep central campfire hearth and Stage 1 Shared Canvas Board clear while spiraling outward infinitely
   const maxR = getPlayableRadius(level);
-  const ring = index < 5 ? 0 : index < 12 ? 1 : 2;
-  const ringCount = ring === 0 ? 5 : ring === 1 ? 7 : 10;
-  const idxInRing = ring === 0 ? index : ring === 1 ? index - 5 : index - 12;
+  const ring = index < 5 ? 0 : Math.floor((index - 5) / 8) + 1;
+  const ringCount = ring === 0 ? 5 : 8;
+  const idxInRing = ring === 0 ? index : (index - 5) % 8;
   const radius =
     ring === 0
       ? Math.min(2.55, Math.max(1.95, maxR - 1.05))
-      : ring === 1
-        ? Math.min(maxR - 1.35, 5.4)
-        : Math.min(maxR - 1.45, 9.2);
-  const angle = (idxInRing / ringCount) * Math.PI * 2 + ring * 0.5 + 0.55;
+      : Math.min(maxR - 1.35, 3.0 + ring * 2.45);
+  const angle = (idxInRing / ringCount) * Math.PI * 2 + ring * 0.55 + 0.55;
   let x = Math.cos(angle) * radius;
   let z = Math.sin(angle) * radius;
   // Avoid Shared Canvas Board at (0, -2.15) at ALL levels
@@ -665,7 +663,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
 
-    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 140);
+    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 420);
 
     const hemi = new THREE.HemisphereLight(darkMode ? 0x6c88c4 : 0xdbeafe, darkMode ? 0x2a2438 : 0x6b4f35, darkMode ? 0.65 : 0.85);
     scene.add(hemi);
@@ -683,7 +681,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
     keyLight.shadow.normalBias = 0.02;
     scene.add(keyLight);
 
-    // Extended surrounding sea so there are no cut-off edges
+    // Extended surrounding sea so there are no cut-off edges at any level
     const seaMat = new THREE.MeshPhysicalMaterial({
       color: darkMode ? 0x264873 : 0x5ca8d6,
       roughness: 0.16,
@@ -708,25 +706,32 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
     });
     scene.add(horizonGroup);
 
-    // Dynamic Island Ground Mesh (regenerated cleanly when expansion level increases)
+    // Dynamic Island Ground Mesh (scales seamlessly as levels expand infinitely)
     let currentGroundTex = createMeadowTexture(darkMode);
     currentGroundTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     const groundMat = new THREE.MeshStandardMaterial({ map: currentGroundTex, roughness: 0.9, metalness: 0.02 });
-    const groundGeo = new THREE.PlaneGeometry(46, 46, 56, 56);
+    const groundGeo = new THREE.PlaneGeometry(46, 46, 64, 64);
     groundGeo.rotateX(-Math.PI / 2);
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.receiveShadow = true;
     const updateTerrainHeights = (lvl: number) => {
+      const neededSpan = Math.max(46, (getPlayableRadius(lvl) + 6) * 2.2);
+      const scaleXZ = neededSpan / 46;
+      ground.scale.set(scaleXZ, 1, scaleXZ);
+      sea.scale.set(Math.max(1, scaleXZ), 1, Math.max(1, scaleXZ));
+      horizonGroup.scale.set(Math.max(1, scaleXZ), 1, Math.max(1, scaleXZ));
+      currentGroundTex.repeat.set(Math.round(10 * scaleXZ), Math.round(10 * scaleXZ));
+
       const posAttr = groundGeo.attributes.position;
       for (let i = 0; i < posAttr.count; i++) {
-        const vx = posAttr.getX(i);
-        const vz = posAttr.getZ(i);
+        const vx = posAttr.getX(i) * scaleXZ;
+        const vz = posAttr.getZ(i) * scaleXZ;
         posAttr.setY(i, groundHeightAt(vx, vz, lvl));
       }
       posAttr.needsUpdate = true;
       groundGeo.computeVertexNormals();
     };
     updateTerrainHeights(levelRef.current);
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.receiveShadow = true;
     scene.add(ground);
 
     // Level 1 Seed Clearing Hearth (center)
@@ -896,7 +901,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
         largeWindmill.rotation.y = 0.58;
         expansionGroup.add(largeWindmill);
 
-        const treeCount = 6 + Math.min(18, lvl * 3);
+        const treeCount = 6 + Math.min(48, lvl * 3);
         const ringR = getPlayableRadius(lvl) - 0.85;
         for (let i = 0; i < treeCount; i++) {
           const ang = (i / treeCount) * Math.PI * 2 + 0.18;
@@ -1028,6 +1033,28 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
         const observatory = buildObservatoryGazebo();
         observatory.position.set(-4.8, groundHeightAt(-4.8, -14.8, lvl), -14.8);
         expansionGroup.add(observatory);
+      }
+
+      // Level 6+ completed (lvl >= 7): Infinite outer archipelago expansions on every stage!
+      for (let s = 7; s <= lvl; s++) {
+        const angle = s * 1.15;
+        const r = Math.max(16, getPlayableRadius(s) - 2.6);
+        const bx = Number((Math.cos(angle) * r).toFixed(2));
+        const bz = Number((Math.sin(angle) * r).toFixed(2));
+        const kind = (s - 7) % 5;
+        const building =
+          kind === 0
+            ? buildTeaPavilion()
+            : kind === 1
+              ? buildLargeWindmill(biomeRotors)
+              : kind === 2
+                ? buildSeedCottage()
+                : kind === 3
+                  ? buildObservatoryGazebo()
+                  : buildGlassGreenhouse();
+        building.position.set(bx, groundHeightAt(bx, bz, lvl), bz);
+        building.rotation.y = -angle + Math.PI / 2;
+        expansionGroup.add(building);
       }
 
       // Guided stepping-stone trail & frontier milestone signpost
@@ -2351,7 +2378,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
                         id="tame-animal-desc"
                         data-testid="animal-tame-description-input"
                         rows={2}
-                        maxLength={180}
+                        maxLength={500}
                         value={tameDescription}
                         onChange={(e) => setTameDescription(e.target.value)}
                         placeholder={`e.g. Describe its coat/feathers, tail, ears, or markings...`}

@@ -96,13 +96,32 @@ const EMAIL_REGEX = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 const PHONE_REGEX = /(\+?\d{1,3}[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
 const ADDRESS_REGEX = /\b\d{1,5}\s+[A-Za-z0-9.\s]{2,25}\s+(Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Lane|Ln|Drive|Dr|Court|Ct)\b/i;
 
+const UNSAFE_WORDS_REGEX = /\b(kill yourself|kys|fuck|shit|bitch|slut|whore|nigger|faggot|retard)\b/i;
+
+function fallbackModerateSentence(trimmed: string): ModerationResult {
+  if (UNSAFE_WORDS_REGEX.test(trimmed)) {
+    return {
+      allowed: false,
+      flagged: true,
+      category: 'unsafe_content',
+      reason: 'Please keep reflections kind and gentle for everyone in the room.',
+    };
+  }
+  return {
+    allowed: true,
+    flagged: false,
+    category: 'clean',
+    reason: 'Passed safety check',
+  };
+}
+
 export async function moderateSentence(sentence: string): Promise<ModerationResult> {
   const trimmed = sentence.trim();
   if (!trimmed) {
     return { allowed: false, flagged: true, category: 'unsafe_content', reason: 'Sentence cannot be empty.' };
   }
-  if (trimmed.length > 140) {
-    return { allowed: false, flagged: true, category: 'unsafe_content', reason: 'Sentence exceeds 140 characters.' };
+  if (trimmed.length > 500) {
+    return { allowed: false, flagged: true, category: 'unsafe_content', reason: 'Sentence exceeds 500 characters.' };
   }
 
   // Deterministic pre-checks for links, emails, phone numbers, street addresses
@@ -122,49 +141,56 @@ export async function moderateSentence(sentence: string): Promise<ModerationResu
       reason: 'Personal contact information (email, phone, or street address) is not allowed.',
     };
   }
+  if (UNSAFE_WORDS_REGEX.test(trimmed)) {
+    return fallbackModerateSentence(trimmed);
+  }
 
-  const response = await generateContentWithFallback((model) => ({
-    model,
-    contents: `Evaluate this short sensory reflection sentence for safety and privacy before publishing in a shared school/dorm room mosaic:\n\n"${trimmed}"`,
-    config: {
-      systemInstruction:
-        'You are a strict content moderator for a peaceful anonymous journaling app. Reject any sentence containing slurs, hate speech, harassment, bullying, sexual or explicit content, threats of violence/self-harm, links/URLs, or personal identifying information (phone numbers, street addresses, emails, social handles, or full first+last real names). Poetic sensory imagery about ordinary objects, weather, fabrics, sounds, or mild bittersweet feelings is completely allowed.',
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          allowed: {
-            type: Type.BOOLEAN,
-            description: 'True only if the sentence is completely safe and free of PII/slurs/harassment/sexual content/threats/links.',
+  try {
+    const response = await generateContentWithFallback((model) => ({
+      model,
+      contents: `Evaluate this short sensory reflection sentence for safety and privacy before publishing in a shared school/dorm room mosaic:\n\n"${trimmed}"`,
+      config: {
+        systemInstruction:
+          'You are a strict content moderator for a peaceful anonymous journaling app. Reject any sentence containing slurs, hate speech, harassment, bullying, sexual or explicit content, threats of violence/self-harm, links/URLs, or personal identifying information (phone numbers, street addresses, emails, social handles, or full first+last real names). Poetic sensory imagery about ordinary objects, weather, fabrics, sounds, or mild bittersweet feelings is completely allowed.',
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            allowed: {
+              type: Type.BOOLEAN,
+              description: 'True only if the sentence is completely safe and free of PII/slurs/harassment/sexual content/threats/links.',
+            },
+            category: {
+              type: Type.STRING,
+              description: 'One of: clean, link_or_media, pii, unsafe_content',
+            },
+            reason: {
+              type: Type.STRING,
+              description: 'Short plain-language reason (under 15 words).',
+            },
           },
-          category: {
-            type: Type.STRING,
-            description: 'One of: clean, link_or_media, pii, unsafe_content',
-          },
-          reason: {
-            type: Type.STRING,
-            description: 'Short plain-language reason (under 15 words).',
-          },
+          required: ['allowed', 'category', 'reason'],
         },
-        required: ['allowed', 'category', 'reason'],
       },
-    },
-  }));
+    }));
 
-  const parsed = JSON.parse((response.text ?? '{}').trim());
-  const allowed = Boolean(parsed.allowed);
-  const category = (['clean', 'link_or_media', 'pii', 'unsafe_content'].includes(parsed.category)
-    ? parsed.category
-    : allowed
-      ? 'clean'
-      : 'unsafe_content') as ModerationResult['category'];
+    const parsed = JSON.parse((response.text ?? '{}').trim());
+    const allowed = Boolean(parsed.allowed);
+    const category = (['clean', 'link_or_media', 'pii', 'unsafe_content'].includes(parsed.category)
+      ? parsed.category
+      : allowed
+        ? 'clean'
+        : 'unsafe_content') as ModerationResult['category'];
 
-  return {
-    allowed,
-    flagged: !allowed,
-    category,
-    reason: parsed.reason || (allowed ? 'Passed moderation' : 'Flagged by safety filter'),
-  };
+    return {
+      allowed,
+      flagged: !allowed,
+      category,
+      reason: parsed.reason || (allowed ? 'Passed moderation' : 'Flagged by safety filter'),
+    };
+  } catch {
+    return fallbackModerateSentence(trimmed);
+  }
 }
 
 export function deriveSensoryWorldSpec(sentence: string, strokeColor: string): SensoryWorldSpec {
@@ -518,6 +544,40 @@ export interface AnimalTameEvaluation {
   feedback: string;
 }
 
+function fallbackEvaluateAnimalDescription(
+  animal: WildAnimalSpec,
+  trimmed: string,
+): AnimalTameEvaluation {
+  const lower = trimmed.toLowerCase();
+  const referenceWords = new Set(
+    `${animal.species} ${animal.visualSummary} ${animal.visualTraits.join(' ')}`
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((w) => w.length >= 3),
+  );
+  const commonVisualWords = [
+    'fur', 'coat', 'feather', 'feathers', 'wing', 'wings', 'tail', 'ear', 'ears',
+    'collar', 'mask', 'paw', 'paws', 'chest', 'belly', 'crest', 'stripe', 'stripes',
+    'spot', 'spots', 'band', 'ring', 'rings', 'fluffy', 'bushy', 'small', 'tiny',
+    'red', 'orange', 'ginger', 'brown', 'white', 'black', 'gray', 'grey', 'gold',
+    'golden', 'blue', 'cream', 'tan', 'silver', 'yellow', 'green', 'peach', 'amber',
+  ];
+  const inputWords = lower.split(/[^a-z]+/).filter((w) => w.length >= 3);
+  const matchedTrait = inputWords.some((w) => referenceWords.has(w) || commonVisualWords.includes(w));
+
+  if (matchedTrait) {
+    return {
+      matched: true,
+      feedback: `${animal.name} tilts its head at your keen observation and trots happily beside you!`,
+    };
+  }
+
+  return {
+    matched: false,
+    feedback: `Take another look at this ${animal.species}'s colors, fur or feathers, or tail and describe what you notice.`,
+  };
+}
+
 export async function evaluateAnimalDescription(
   animal: WildAnimalSpec,
   userDescription: string,
@@ -530,42 +590,46 @@ export async function evaluateAnimalDescription(
     };
   }
 
-  const response = await generateContentWithFallback((model) => ({
-    model,
-    contents: `Target 3D island animal: ${animal.name} (${animal.species})
+  try {
+    const response = await generateContentWithFallback((model) => ({
+      model,
+      contents: `Target 3D island animal: ${animal.name} (${animal.species})
 Visible appearance summary: ${animal.visualSummary}
 Observable visual traits:
 ${animal.visualTraits.map((t) => `- ${t}`).join('\n')}
 
 Player's appearance description: "${trimmed}"`,
-    config: {
-      systemInstruction:
-        'You are a friendly wildlife guide in a cozy 3D island game. Decide whether the player accurately observed and described how the target 3D animal looks based on the provided visible traits. Accept concise or casual descriptions as long as they mention at least one genuine visible detail (such as fur/feather colors, markings, tail, crest, ears, collar, mask, paws, or held item) without contradicting the animal. Reject gibberish, purely generic phrases like "cute animal" with zero visual traits, or descriptions of completely wrong colors/species. Return JSON with matched (boolean) and feedback (1 warm sentence: if matched, praise their observation; if false, give a gentle visual hint about what to notice without listing everything verbatim).',
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          matched: {
-            type: Type.BOOLEAN,
-            description: 'True if the player accurately described at least one visible trait of the animal.',
+      config: {
+        systemInstruction:
+          'You are a friendly wildlife guide in a cozy 3D island game. Decide whether the player accurately observed and described how the target 3D animal looks based on the provided visible traits. Accept concise or casual descriptions as long as they mention at least one genuine visible detail (such as fur/feather colors, markings, tail, crest, ears, collar, mask, paws, or held item) without contradicting the animal. Reject gibberish, purely generic phrases like "cute animal" with zero visual traits, or descriptions of completely wrong colors/species. Return JSON with matched (boolean) and feedback (1 warm sentence: if matched, praise their observation; if false, give a gentle visual hint about what to notice without listing everything verbatim).',
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            matched: {
+              type: Type.BOOLEAN,
+              description: 'True if the player accurately described at least one visible trait of the animal.',
+            },
+            feedback: {
+              type: Type.STRING,
+              description: 'One friendly sentence responding to the player observation.',
+            },
           },
-          feedback: {
-            type: Type.STRING,
-            description: 'One friendly sentence responding to the player observation.',
-          },
+          required: ['matched', 'feedback'],
         },
-        required: ['matched', 'feedback'],
       },
-    },
-  }));
+    }));
 
-  const parsed = JSON.parse((response.text ?? '{}').trim());
-  const matched = Boolean(parsed.matched);
-  const feedback =
-    String(parsed.feedback || '').trim() ||
-    (matched
-      ? `${animal.name} recognizes your gentle attention and trots happily beside you!`
-      : `Take another look at the ${animal.species}'s coat, markings, or tail and describe what you see.`);
+    const parsed = JSON.parse((response.text ?? '{}').trim());
+    const matched = Boolean(parsed.matched);
+    const feedback =
+      String(parsed.feedback || '').trim() ||
+      (matched
+        ? `${animal.name} recognizes your gentle attention and trots happily beside you!`
+        : `Take another look at the ${animal.species}'s coat, markings, or tail and describe what you see.`);
 
-  return { matched, feedback };
+    return { matched, feedback };
+  } catch {
+    return fallbackEvaluateAnimalDescription(animal, trimmed);
+  }
 }

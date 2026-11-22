@@ -408,9 +408,9 @@ function buildExtraJournalAnimal(oneBasedIdx: number): WildAnimalSpec {
   const offset = oneBasedIdx - JOURNAL_BONUS_ANIMALS.length - 1;
   const species = EXTRA_SPECIES_CYCLE[offset % EXTRA_SPECIES_CYCLE.length];
   const adj = EXTRA_ADJECTIVES[offset % EXTRA_ADJECTIVES.length];
-  const pal = EXTRA_PALETTES[offset % EXTRA_PALETTES.length];
+  const pal = EXTRA_PALETTES[Math.floor(offset / EXTRA_ADJECTIVES.length) % EXTRA_PALETTES.length];
   const angle = oneBasedIdx * 2.39996;
-  const r = 2.0 + (offset % 4) * 0.65;
+  const r = 2.0 + (offset % 6) * 0.75;
   const speciesTitle = species.charAt(0).toUpperCase() + species.slice(1);
   return {
     key: `journal_extra_${oneBasedIdx}`,
@@ -436,10 +436,47 @@ function buildExtraJournalAnimal(oneBasedIdx: number): WildAnimalSpec {
   };
 }
 
+function buildExtraWaveAnimal(unlockLevel: number, slot: number): WildAnimalSpec {
+  const waveNum = Math.floor(unlockLevel / 3);
+  const idx = waveNum * 2 + slot;
+  const species = EXTRA_SPECIES_CYCLE[idx % EXTRA_SPECIES_CYCLE.length];
+  const adj = EXTRA_ADJECTIVES[(idx + waveNum) % EXTRA_ADJECTIVES.length];
+  const pal = EXTRA_PALETTES[idx % EXTRA_PALETTES.length];
+  const angle = unlockLevel * 1.3 + slot * 2.2;
+  const r = 6.5 + waveNum * 1.8;
+  const speciesTitle = species.charAt(0).toUpperCase() + species.slice(1);
+  return {
+    key: `wave_${unlockLevel}_${slot}`,
+    species,
+    name: `${adj} Horizon ${speciesTitle}`,
+    unlockLevel,
+    visualSummary: `A ${pal.name} ${species} with cream markings and bright ${species} accents.`,
+    visualTraits: [
+      `${pal.name} coat or feathers`,
+      'cream chest/belly markings',
+      `distinctive ${species} silhouette`,
+    ],
+    palette: {
+      primary: pal.primary,
+      secondary: pal.secondary,
+      detail: pal.detail,
+      accent: pal.accent,
+    },
+    homePos: {
+      x: Number((Math.cos(angle) * r).toFixed(2)),
+      z: Number((Math.sin(angle) * r).toFixed(2)),
+    },
+  };
+}
+
 export function getUnlockedWildAnimals(level: number, journalCount = 0): WildAnimalSpec[] {
   const safeLevel = Math.max(1, level);
   const waveAnimals = WILD_ANIMALS_CATALOG.filter((a) => safeLevel >= a.unlockLevel);
-  const safeJournals = Math.max(0, Math.min(24, Math.floor(journalCount)));
+  const extraWaves: WildAnimalSpec[] = [];
+  for (let lvl = 15; lvl <= safeLevel; lvl += 3) {
+    extraWaves.push(buildExtraWaveAnimal(lvl, 0), buildExtraWaveAnimal(lvl, 1));
+  }
+  const safeJournals = Math.max(0, Math.floor(journalCount));
   const journalAnimals: WildAnimalSpec[] = [];
   for (let i = 1; i <= safeJournals; i++) {
     if (i <= JOURNAL_BONUS_ANIMALS.length) {
@@ -448,7 +485,7 @@ export function getUnlockedWildAnimals(level: number, journalCount = 0): WildAni
       journalAnimals.push(buildExtraJournalAnimal(i));
     }
   }
-  return [...journalAnimals, ...waveAnimals];
+  return [...journalAnimals, ...waveAnimals, ...extraWaves];
 }
 
 export function getJournalAnimalOrder(key: string): number | null {
@@ -457,7 +494,7 @@ export function getJournalAnimalOrder(key: string): number | null {
   const m = /^journal_extra_(\d+)$/.exec(key);
   if (m) {
     const n = Number(m[1]);
-    if (Number.isInteger(n) && n > JOURNAL_BONUS_ANIMALS.length && n <= 24) return n;
+    if (Number.isInteger(n) && n > JOURNAL_BONUS_ANIMALS.length) return n;
   }
   return null;
 }
@@ -465,7 +502,8 @@ export function getJournalAnimalOrder(key: string): number | null {
 export function getNextAnimalWaveLevel(level: number): number | null {
   const safeLevel = Math.max(1, level);
   const next = WILD_ANIMALS_CATALOG.find((a) => a.unlockLevel > safeLevel);
-  return next ? next.unlockLevel : null;
+  if (next) return next.unlockLevel;
+  return Math.floor(safeLevel / 3) * 3 + 3;
 }
 
 export function getWildAnimalByKey(key: string): WildAnimalSpec | undefined {
@@ -476,8 +514,16 @@ export function getWildAnimalByKey(key: string): WildAnimalSpec | undefined {
   const m = /^journal_extra_(\d+)$/.exec(key);
   if (m) {
     const n = Number(m[1]);
-    if (Number.isInteger(n) && n > JOURNAL_BONUS_ANIMALS.length && n <= 24) {
+    if (Number.isInteger(n) && n > JOURNAL_BONUS_ANIMALS.length) {
       return buildExtraJournalAnimal(n);
+    }
+  }
+  const w = /^wave_(\d+)_(\d+)$/.exec(key);
+  if (w) {
+    const lvl = Number(w[1]);
+    const slot = Number(w[2]);
+    if (Number.isInteger(lvl) && lvl >= 15 && (slot === 0 || slot === 1)) {
+      return buildExtraWaveAnimal(lvl, slot);
     }
   }
   return undefined;

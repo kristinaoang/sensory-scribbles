@@ -1388,7 +1388,7 @@ function mapRoomQuest(row: any): RoomQuest {
   };
 }
 
-export async function getAllEntriesForRoom(roomId: string, limit = 100): Promise<JournalEntry[]> {
+export async function getAllEntriesForRoom(roomId: string, limit = 5000): Promise<JournalEntry[]> {
   if (USE_POSTGRES) {
     const { rows } = await getPg().query(
       `SELECT e.*, u.display_name AS author_display_name, u.avatar_color AS author_avatar_color, p.text AS prompt_text
@@ -1555,7 +1555,8 @@ export async function getRoomProgression(roomId: string): Promise<WorldProgressi
   const completedQuests = quests.filter((q) => q.status === 'completed');
   const activeQuest = quests.find((q) => q.status === 'active') || quests[quests.length - 1];
   const level = completedQuests.length + 1;
-  const stageName = STAGE_NAMES[Math.min(level - 1, STAGE_NAMES.length - 1)];
+  const stageName =
+    level <= STAGE_NAMES.length ? STAGE_NAMES[level - 1] : getChapterTemplate(level).stageName;
   const unlockedBiomes = ['seed_clearing', ...completedQuests.map((q) => q.unlockedBiome)];
   const lastExpandedAt =
     completedQuests.length > 0 ? completedQuests[completedQuests.length - 1].completedAt : null;
@@ -1731,7 +1732,7 @@ export async function upsertTamedAnimal(params: {
   const id = `ta_${crypto.randomUUID().slice(0, 10)}`;
   const now = new Date().toISOString();
   const cleanNickname = params.nickname.trim().slice(0, 28);
-  const cleanDescription = params.description.trim().slice(0, 180);
+  const cleanDescription = params.description.trim().slice(0, 500);
 
   if (USE_POSTGRES) {
     await getPg().query(

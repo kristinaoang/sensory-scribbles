@@ -434,7 +434,7 @@ async function startServer() {
       const [prompt, entries, todayEntries, strokes, progression, tamedAnimals, animalAffections, userSubmittedToday, activeUser] =
         await Promise.all([
           getPromptForDate(today),
-          getAllEntriesForRoom(room.id, 36),
+          getAllEntriesForRoom(room.id, 5000),
           getEntriesForRoomAndDate(room.id, today, false),
           getCanvasStrokesForRoom(room.id),
           getRoomProgression(room.id),
@@ -550,8 +550,8 @@ async function startServer() {
         return;
       }
 
-      if (!description || description.length < 5 || description.length > 180) {
-        res.status(400).json({ error: 'Please describe how the animal looks (5–180 characters).' });
+      if (!description || description.length < 5 || description.length > 500) {
+        res.status(400).json({ error: 'Please describe how the animal looks (5–500 characters).' });
         return;
       }
 
@@ -564,7 +564,7 @@ async function startServer() {
       const progression = await getRoomProgression(room.id);
       const journalOrder = getJournalAnimalOrder(animalKey);
       if (journalOrder !== null) {
-        const roomEntries = await getAllEntriesForRoom(room.id, 100);
+        const roomEntries = await getAllEntriesForRoom(room.id, 5000);
         const nonDemoCount = roomEntries.filter((e) => !e.isDemo).length;
         if (nonDemoCount < journalOrder) {
           res.status(403).json({
@@ -586,7 +586,7 @@ async function startServer() {
 
       // Reuse safety moderation on appearance description + optional nickname
       const textToModerate = rawNickname ? `${rawNickname}: ${description}` : description;
-      if (textToModerate.length <= 140) {
+      if (textToModerate.length <= 500) {
         try {
           const mod = await moderateSentence(textToModerate);
           if (!mod.allowed) {
@@ -653,8 +653,8 @@ async function startServer() {
         res.status(400).json({ error: 'Room and anonymous profile are required.' });
         return;
       }
-      if (!sentence || sentence.length > 140) {
-        res.status(400).json({ error: 'Answer must be between 1 and 140 characters.' });
+      if (!sentence || sentence.length > 500) {
+        res.status(400).json({ error: 'Answer must be between 1 and 500 characters.' });
         return;
       }
       if (!strokeJson) {
@@ -776,8 +776,8 @@ async function startServer() {
         res.status(400).json({ error: 'Room and anonymous profile are required.' });
         return;
       }
-      if (!sentence || sentence.length > 140) {
-        res.status(400).json({ error: 'Sentence must be between 1 and 140 characters.' });
+      if (!sentence || sentence.length > 500) {
+        res.status(400).json({ error: 'Sentence must be between 1 and 500 characters.' });
         return;
       }
       if (!strokeJson) {
@@ -789,12 +789,6 @@ async function startServer() {
       const user = await getUserById(userId);
       if (!room || !user) {
         res.status(404).json({ error: 'Room or user profile not found.' });
-        return;
-      }
-
-      const already = await hasUserSubmittedOnDate(room.id, user.id, entryDate);
-      if (already) {
-        res.status(409).json({ error: 'You already shared your reflection in this room today. Come back tomorrow!' });
         return;
       }
 
@@ -1143,8 +1137,8 @@ async function startServer() {
         res.status(400).json({ error: 'Room and alias are required.' });
         return;
       }
-      if (!reflection || reflection.length > 140) {
-        res.status(400).json({ error: 'Journal reflection must be 1–140 characters.' });
+      if (!reflection || reflection.length > 500) {
+        res.status(400).json({ error: 'Journal reflection must be 1–500 characters.' });
         return;
       }
       if (!strokeJson) {

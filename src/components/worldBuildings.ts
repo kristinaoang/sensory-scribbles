@@ -16,7 +16,7 @@ export function getPlayableRadius(level: number): number {
   if (lvl === 3) return 10.8;
   if (lvl === 4) return 14.2;
   if (lvl === 5) return 17.6;
-  return Math.min(23.0, 17.6 + (lvl - 5) * 3.0);
+  return 17.6 + (lvl - 5) * 2.8;
 }
 
 export function groundHeightAt(x: number, z: number, level: number): number {
@@ -134,12 +134,35 @@ export const ALL_GUIDED_PATH_STOPS: GuidedPathStop[] = [
   },
 ];
 
+function buildProceduralStop(stageLevel: number): GuidedPathStop {
+  const angle = stageLevel * 1.15;
+  const r = Math.max(16, getPlayableRadius(stageLevel) - 2.6);
+  const labels = ['Archipelago Pavilion', 'Horizon Windmill', 'Meadow Cottage', 'Lookout Gazebo', 'Glass Conservatory'];
+  const title = `${labels[(stageLevel - 7) % labels.length]} · Stage ${stageLevel}`;
+  return {
+    id: `archipelago_stage_${stageLevel}`,
+    title,
+    caption: `Added at Level ${stageLevel - 1} completion — outer meadow expansion unlocked with your room's reflections.`,
+    minLevel: stageLevel,
+    x: Number((Math.cos(angle) * r).toFixed(2)),
+    z: Number((Math.sin(angle) * r).toFixed(2)),
+  };
+}
+
 export function getGuidedPathStops(level: number): GuidedPathStop[] {
-  return ALL_GUIDED_PATH_STOPS.filter((s) => s.minLevel <= Math.max(1, level));
+  const safeLevel = Math.max(1, level);
+  const base = ALL_GUIDED_PATH_STOPS.filter((s) => s.minLevel <= safeLevel);
+  for (let s = 7; s <= safeLevel; s++) {
+    base.push(buildProceduralStop(s));
+  }
+  return base;
 }
 
 export function getNextLockedFrontier(level: number): GuidedPathStop | null {
-  return ALL_GUIDED_PATH_STOPS.find((s) => s.minLevel > Math.max(1, level)) ?? null;
+  const safeLevel = Math.max(1, level);
+  const nextFixed = ALL_GUIDED_PATH_STOPS.find((s) => s.minLevel > safeLevel);
+  if (nextFixed) return nextFixed;
+  return buildProceduralStop(safeLevel + 1);
 }
 
 /**
