@@ -23,13 +23,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
-          cache: 'npm'
 
       - name: Install dependencies
         run: |
@@ -47,7 +46,7 @@ jobs:
 
       - name: Upload production artifact
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sensory-scribbles-dist
           retention-days: 7
@@ -59,8 +58,7 @@ jobs:
             src/shared
             src/types.ts
             db
-            package.json
-            package-lock.json
+            package*.json
             tsconfig.json
 
   deploy:
@@ -86,7 +84,7 @@ jobs:
 
       - name: Download production artifact
         if: steps.check_secrets.outputs.enabled == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: sensory-scribbles-dist
           path: ./release
