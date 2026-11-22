@@ -63,6 +63,10 @@ import {
   groundHeightAt,
   walkSurfaceHeightAt,
 } from './worldBuildings';
+import { CampusAreaJournal } from './CampusAreaJournal';
+import { CampusPromptCard } from './CampusPromptCard';
+
+const WELLESLEY_LAND_ORIGIN = 'http://127.0.0.1:3001';
 
 const _fwd = new THREE.Vector3();
 const _right = new THREE.Vector3();
@@ -171,52 +175,151 @@ function buildCompositeTree(style: 'pine' | 'blossom' | 'birch', scale = 1): THR
     metalness: 0.02,
   });
 
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.17, 1.05, 8), trunkMat);
-  trunk.position.y = 0.52;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 1.28, 8), trunkMat);
+  trunk.position.y = 0.64;
   trunk.castShadow = true;
   g.add(trunk);
 
-  const branchL = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.45, 6), trunkMat);
-  branchL.position.set(-0.18, 0.86, 0);
-  branchL.rotation.z = 0.65;
+  const branchL = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.62, 6), trunkMat);
+  branchL.position.set(-0.26, 1.05, 0);
+  branchL.rotation.z = 0.7;
   g.add(branchL);
 
-  const branchR = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.42, 6), trunkMat);
-  branchR.position.set(0.17, 0.92, 0.06);
-  branchR.rotation.z = -0.58;
+  const branchR = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.58, 6), trunkMat);
+  branchR.position.set(0.24, 1.12, 0.06);
+  branchR.rotation.z = -0.62;
   g.add(branchR);
 
   if (style === 'pine') {
-    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2e6f4e, roughness: 0.78 });
-    const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.72, 1.1, 8), foliageMat);
-    c1.position.y = 1.25;
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x6fbf8a, roughness: 0.78 });
+    const shadeMat = new THREE.MeshStandardMaterial({ color: 0x4f9d6e, roughness: 0.8 });
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(0.98, 1.28, 8), shadeMat);
+    c1.position.y = 1.42;
     c1.castShadow = true;
-    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.55, 0.95, 8), foliageMat);
-    c2.position.y = 1.78;
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.74, 1.08, 8), foliageMat);
+    c2.position.y = 2.05;
     c2.castShadow = true;
-    const c3 = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.7, 8), foliageMat);
-    c3.position.y = 2.25;
+    const c3 = new THREE.Mesh(new THREE.ConeGeometry(0.48, 0.82, 8), foliageMat);
+    c3.position.y = 2.62;
     c3.castShadow = true;
     g.add(c1, c2, c3);
   } else {
-    const leafHex = style === 'blossom' ? 0xf2b5c4 : 0x529b66;
-    const accentHex = style === 'blossom' ? 0xfbe0e7 : 0x7cc488;
+    const leafHex = style === 'blossom' ? 0xf2b5c4 : 0x7dcea0;
+    const accentHex = style === 'blossom' ? 0xfbe0e7 : 0xa8e0b4;
     const matA = new THREE.MeshStandardMaterial({ color: leafHex, roughness: 0.74 });
     const matB = new THREE.MeshStandardMaterial({ color: accentHex, roughness: 0.7 });
-    const puff1 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.54, 1), matA);
-    puff1.position.set(0, 1.48, 0);
+    const puff1 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.74, 1), matA);
+    puff1.position.set(0, 1.72, 0);
     puff1.castShadow = true;
-    const puff2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.38, 1), matB);
-    puff2.position.set(-0.32, 1.24, 0.12);
+    const puff2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.52, 1), matB);
+    puff2.position.set(-0.5, 1.42, 0.16);
     puff2.castShadow = true;
-    const puff3 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.36, 1), matB);
-    puff3.position.set(0.3, 1.28, -0.1);
+    const puff3 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), matA);
+    puff3.position.set(0.48, 1.46, -0.14);
     puff3.castShadow = true;
-    g.add(puff1, puff2, puff3);
+    const puff4 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 1), matB);
+    puff4.position.set(0.06, 2.05, 0.22);
+    puff4.castShadow = true;
+    g.add(puff1, puff2, puff3, puff4);
   }
 
   g.scale.setScalar(scale);
   return g;
+}
+
+function addShadeGrove(parent: THREE.Group, lvl: number) {
+  const maxR = getPlayableRadius(lvl);
+  const spots: Array<{ x: number; z: number; scale: number; style: 'pine' | 'blossom' | 'birch' }> = [];
+  const reserved: Array<{ x: number; z: number; r: number }> = [
+    { x: 0, z: 1.9, r: 2.15 },
+    { x: 0.4, z: 1.9, r: 1.65 },
+    { x: 0, z: 0, r: 1.45 },
+    { x: 0, z: -2.15, r: 2.5 },
+  ];
+  if (lvl >= 2) reserved.push({ x: -3.8, z: -3.2, r: 3.1 });
+  if (lvl >= 3) reserved.push({ x: 6.2, z: 0.4, r: 3.45 });
+  if (lvl >= 4) {
+    reserved.push({ x: -6.8, z: 3.6, r: 2.4 }, { x: 4.4, z: -7.8, r: 2.4 }, { x: 7.4, z: 5.8, r: 2.3 });
+  }
+  if (lvl >= 5) reserved.push({ x: 0.2, z: 13.8, r: 2.55 }, { x: -10.8, z: 9.2, r: 2.35 });
+  if (lvl >= 6) reserved.push({ x: -4.8, z: -14.8, r: 2.55 });
+  for (let i = 0; i < 18; i++) {
+    const plot = getPlotCoordinate(i, lvl);
+    reserved.push({ x: plot.x, z: plot.z, r: 1.6 });
+  }
+
+  const blocked = (x: number, z: number) => {
+    if (Math.hypot(x, z) > maxR - 0.4) return true;
+    if (groundHeightAt(x, z, lvl) < -0.2) return true;
+    if (Math.abs(x) < 1.2 && z > -3.45 && z < 2.75) return true;
+    if (z > 1.15 && Math.abs(x) < (z > 2.35 ? 2.4 : 1.5)) return true;
+    if (lvl >= 2) {
+      const wx = -3.8;
+      const wz = -3.2;
+      const vx = wx;
+      const vz = wz - 1.9;
+      const len2 = vx * vx + vz * vz;
+      const t = Math.max(0, Math.min(1, (x * vx + (z - 1.9) * vz) / len2));
+      if (Math.hypot(x - vx * t, z - (1.9 + vz * t)) < 1.25) return true;
+    }
+    for (const c of reserved) {
+      if (Math.hypot(x - c.x, z - c.z) < c.r) return true;
+    }
+    for (const s of spots) {
+      if (Math.hypot(x - s.x, z - s.z) < 2.05) return true;
+    }
+    return false;
+  };
+
+  const styles: Array<'pine' | 'blossom' | 'birch'> = ['pine', 'blossom', 'birch'];
+  const tryAdd = (x: number, z: number, scale: number, style: 'pine' | 'blossom' | 'birch') => {
+    if (blocked(x, z)) return;
+    spots.push({ x, z, scale, style });
+  };
+
+  if (lvl >= 2) {
+    const anchors: Array<[number, number, number, 'pine' | 'blossom' | 'birch']> = [
+      [-3.25, 4.45, 1.72, 'pine'],
+      [3.15, 4.05, 1.68, 'blossom'],
+      [-5.45, 1.15, 1.58, 'birch'],
+      [5.25, 0.35, 1.55, 'pine'],
+      [4.45, -3.65, 1.62, 'blossom'],
+      [-6.2, -0.7, 1.5, 'pine'],
+      [2.15, -5.45, 1.58, 'birch'],
+      [-5.55, 4.75, 1.48, 'blossom'],
+      [6.15, 3.25, 1.52, 'pine'],
+      [6.35, -2.55, 1.5, 'blossom'],
+      [-6.45, 2.85, 1.46, 'pine'],
+      [1.55, 5.35, 1.42, 'birch'],
+    ];
+    for (const [x, z, scale, style] of anchors) tryAdd(x, z, scale, style);
+  }
+
+  const innerCount = lvl <= 1 ? 4 : 7 + Math.min(5, lvl);
+  const outerCount = lvl <= 1 ? 0 : 9 + Math.min(12, lvl * 2);
+  const innerR = Math.min(Math.max(3.05, maxR * 0.58), maxR - 1.85);
+  const outerR = Math.max(2.4, maxR - 1.05);
+  for (let i = 0; i < innerCount; i++) {
+    const ang = (i / innerCount) * Math.PI * 2 + 0.37;
+    tryAdd(Math.cos(ang) * innerR, Math.sin(ang) * innerR, 1.42 + (i % 3) * 0.1, styles[i % 3]);
+  }
+  for (let i = 0; i < outerCount; i++) {
+    const ang = (i / outerCount) * Math.PI * 2 + 0.12;
+    const wobble = 0.86 + ((i * 17) % 5) * 0.045;
+    tryAdd(
+      Math.cos(ang) * outerR * wobble,
+      Math.sin(ang) * outerR * wobble,
+      1.38 + (i % 4) * 0.08,
+      styles[(i + 1) % 3],
+    );
+  }
+
+  for (const s of spots) {
+    const tree = buildCompositeTree(s.style, s.scale);
+    tree.position.set(s.x, groundHeightAt(s.x, s.z, lvl), s.z);
+    tree.rotation.y = s.x * 1.3 + s.z * 0.7;
+    parent.add(tree);
+  }
 }
 
 function buildEntryPlotMesh(
@@ -421,6 +524,11 @@ interface RoomWorld3DProps {
   onOpenCustomizer?: () => void;
   onToggleDarkMode?: () => void;
   embedded?: boolean;
+  userId?: string;
+  roomId?: string;
+  campusQuestSaved?: { questId: string; nonce: number } | null;
+  onCampusQuest?: (quest: { id: string; title: string; prompt: string; type?: string }) => void;
+  onAreaJournalSaved?: () => void;
 }
 
 export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
@@ -442,6 +550,11 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
   onOpenCustomizer,
   onToggleDarkMode,
   embedded = false,
+  userId,
+  roomId,
+  campusQuestSaved = null,
+  onCampusQuest,
+  onAreaJournalSaved,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const keysRef = useRef<Record<string, boolean>>({});
@@ -451,6 +564,8 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
   const onSelectEntryRef = useRef(onSelectEntry);
   const onOpenStudioRef = useRef(onOpenStudio);
   const audioRef = useRef<WorldAmbientAudio | null>(null);
+  const campusFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const onCampusQuestRef = useRef(onCampusQuest);
 
   const [camMode, setCamMode] = useState<'follow' | 'aerial' | 'first'>('follow');
   const [hudCollapsed, setHudCollapsed] = useState(false);
@@ -484,6 +599,36 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
     onOpenStudioRef.current = onOpenStudio;
   }, [onOpenStudio]);
 
+  useEffect(() => {
+    onCampusQuestRef.current = onCampusQuest;
+  }, [onCampusQuest]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== WELLESLEY_LAND_ORIGIN && event.origin !== 'http://localhost:3001') return;
+      const data = event.data;
+      if (!data || data.source !== 'ss-guide' || data.action !== 'open-quest') return;
+      const quest = data.quest;
+      if (!quest || typeof quest.id !== 'string' || typeof quest.prompt !== 'string' || typeof quest.title !== 'string') return;
+      onCampusQuestRef.current?.({
+        id: quest.id,
+        title: quest.title,
+        prompt: quest.prompt,
+        type: typeof quest.type === 'string' ? quest.type : undefined,
+      });
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
+  useEffect(() => {
+    if (!campusQuestSaved || !campusFrameRef.current?.contentWindow) return;
+    campusFrameRef.current.contentWindow.postMessage(
+      { source: 'ss-guide', action: 'quest-saved', questId: campusQuestSaved.questId },
+      WELLESLEY_LAND_ORIGIN,
+    );
+  }, [campusQuestSaved]);
+
   const level = progression?.level ?? 1;
   const activeChapter = progression?.activeQuest?.chapterNumber ?? level;
   useEffect(() => {
@@ -510,7 +655,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
 
   useEffect(() => {
     const container = mountRef.current;
-    if (!container) return;
+    if (!container || WELLESLEY_LAND_ORIGIN) return;
 
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const isSoftwareGl = detectSoftwareGl();
@@ -548,7 +693,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
     scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
     pmremGenerator.dispose();
 
-    const camera = new THREE.PerspectiveCamera(46, width / height, 0.1, 140);
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 160);
 
     const hemi = new THREE.HemisphereLight(darkMode ? 0x6c88c4 : 0xdbeafe, darkMode ? 0x2a2438 : 0x6b4f35, darkMode ? 0.65 : 0.85);
     scene.add(hemi);
@@ -748,6 +893,8 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
       tapestryGroup.position.y = groundHeightAt(0, -2.15, lvl);
       tapestryGroup.visible = true;
 
+      addShadeGrove(expansionGroup, lvl);
+
       // Stage 1 (lvl === 1) starts cleanly with the campfire + Shared Canvas Board (+ user prompt landmarks)!
       // Level 1 completed (lvl >= 2): Expands land + adds Trailhead Arch, Large Meadow Windmill & wildflowers
       if (lvl >= 2) {
@@ -759,21 +906,6 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
         largeWindmill.position.set(-3.8, groundHeightAt(-3.8, -3.2, lvl), -3.2);
         largeWindmill.rotation.y = 0.58;
         expansionGroup.add(largeWindmill);
-
-        const treeCount = 6 + Math.min(18, lvl * 3);
-        const ringR = getPlayableRadius(lvl) - 0.85;
-        for (let i = 0; i < treeCount; i++) {
-          const ang = (i / treeCount) * Math.PI * 2 + 0.18;
-          const tx = Math.cos(ang) * ringR;
-          const tz = Math.sin(ang) * ringR;
-          const ty = groundHeightAt(tx, tz, lvl);
-          if (ty < -0.22) continue;
-          if (lvl >= 3 && Math.hypot(tx - 6.2, tz - 0.4) < 3.0) continue;
-          const style = i % 3 === 0 ? 'blossom' : i % 2 === 0 ? 'pine' : 'birch';
-          const tree = buildCompositeTree(style, 0.88 + (i % 3) * 0.14);
-          tree.position.set(tx, ty, tz);
-          expansionGroup.add(tree);
-        }
 
         const flowerGeo = new THREE.CylinderGeometry(0.09, 0.03, 0.14, 6);
         const flowerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
@@ -1040,7 +1172,26 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
 
     // Input & Raycast state
     let yaw = 0;
-    let pitch = 0.42;
+    let pitch = 0.38;
+
+    const aimWideFollow = (alpha: number) => {
+      const dist = 7.6;
+      const cosPitch = Math.cos(pitch);
+      _camTarget.set(
+        playerPos.x + Math.sin(yaw) * cosPitch * dist,
+        playerPos.y + 0.35 + Math.sin(pitch) * dist,
+        playerPos.z + Math.cos(yaw) * cosPitch * dist,
+      );
+      _lookAt.set(
+        playerPos.x - Math.sin(yaw) * 1.45,
+        playerPos.y + 1.55,
+        playerPos.z - Math.cos(yaw) * 1.45,
+      );
+      if (alpha >= 1) camera.position.copy(_camTarget);
+      else camera.position.lerp(_camTarget, alpha);
+      camera.lookAt(_lookAt);
+    };
+    aimWideFollow(1);
     let dragging = false;
     let dragStart = { x: 0, y: 0 };
     let lastPointer = { x: 0, y: 0 };
@@ -1251,8 +1402,8 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
         if (celebrationTimer <= 0) burstMesh.visible = false;
       }
 
-      // Exponentially damped camera modes
-      const damp = 1 - Math.exp(-7.5 * dt);
+      // Follow eases while walking. Reduced motion snaps, with no extra camera move.
+      const damp = prefersReducedMotion ? 1 : 1 - Math.exp(-7.5 * dt);
       if (camModeRef.current === 'first') {
         avatar.root.visible = false;
         _camTarget.set(playerPos.x, playerPos.y + 1.05, playerPos.z);
@@ -1277,15 +1428,7 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
         camera.lookAt(_lookAt);
       } else {
         avatar.root.visible = true;
-        const dist = 6.2;
-        _camTarget.set(
-          playerPos.x + Math.sin(yaw) * Math.cos(pitch) * dist,
-          playerPos.y + 1.15 + Math.sin(pitch) * dist,
-          playerPos.z + Math.cos(yaw) * Math.cos(pitch) * dist,
-        );
-        camera.position.lerp(_camTarget, damp);
-        _lookAt.set(playerPos.x, playerPos.y + 0.85, playerPos.z);
-        camera.lookAt(_lookAt);
+        aimWideFollow(damp);
       }
 
       renderer.render(scene, camera);
@@ -1405,6 +1548,53 @@ export const RoomWorld3D: React.FC<RoomWorld3DProps> = ({
     camMode === 'follow' ? 'Follow Avatar' : camMode === 'aerial' ? 'Island Aerial' : '1st-Person';
 
   const containerHeightClass = embedded ? 'h-[560px] rounded-3xl' : 'h-[calc(100vh-3.5rem)] min-h-[560px]';
+
+  if (WELLESLEY_LAND_ORIGIN) {
+    const campusParams = new URLSearchParams({
+      child: '1',
+      guide: '1',
+      parent: typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:3000',
+    });
+    if (userId) campusParams.set('userId', userId);
+    if (roomId) campusParams.set('roomId', roomId);
+    return (
+      <div
+        className={`relative w-full overflow-hidden bg-[#E7F6E4] dark:bg-[#1A2444] ${containerHeightClass}`}
+        aria-label={`Wellesley campus for ${roomName}`}
+      >
+        <iframe
+          ref={campusFrameRef}
+          title="Wellesley College campus"
+          src={`${WELLESLEY_LAND_ORIGIN}/?${campusParams.toString()}`}
+          className="absolute inset-0 h-full w-full border-0"
+          allow="fullscreen; autoplay; pointer-lock"
+        />
+        {userId && roomId ? (
+          <CampusAreaJournal
+            userId={userId}
+            roomId={roomId}
+            savedNonce={campusQuestSaved?.nonce ?? 0}
+            frameRef={campusFrameRef}
+            onOpenStudio={(quest) => onCampusQuest?.(quest)}
+            onSaved={onAreaJournalSaved}
+          />
+        ) : (
+          <CampusPromptCard
+            roomName={roomName}
+            level={level}
+            stageName={progression?.stageName}
+            prompt={activeQuest?.questionPrompt || 'Draw the quietest thing you can see.'}
+            drawingPrompt={activeQuest?.drawingPrompt}
+            progressCount={progressCount}
+            progressTarget={progressTarget}
+            expandedTitle={justExpandedQuest?.title}
+            onDismissExpansion={onDismissExpansionBanner}
+            onAnswer={onOpenStudio}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div

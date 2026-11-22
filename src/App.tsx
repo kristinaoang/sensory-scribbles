@@ -73,6 +73,8 @@ export default function App() {
   // Overlays & live state
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(false);
+  const [campusQuest, setCampusQuest] = useState<{ id: string; title: string; prompt: string; type?: string } | null>(null);
+  const [campusQuestSaved, setCampusQuestSaved] = useState<{ questId: string; nonce: number } | null>(null);
   const [customizerOpen, setCustomizerOpen] = useState(false);
   const [avatarLook, setAvatarLook] = useState<AvatarCustomization>(() => loadSavedAvatarLook());
   const [worldEntry, setWorldEntry] = useState<JournalEntry | null>(null);
@@ -489,7 +491,21 @@ export default function App() {
               onDismissExpansionBanner={() => setJustExpandedQuest(null)}
               onSelectEntry={(entry) => setWorldEntry(entry)}
               onOpenMinigame={(entry) => setMinigameEntry(entry)}
-              onOpenStudio={() => setStudioOpen(true)}
+              userId={user.id}
+              roomId={worldData.room.id}
+              campusQuestSaved={campusQuestSaved}
+              onCampusQuest={(quest) => {
+                setCampusQuest(quest);
+                setStudioOpen(true);
+              }}
+              onAreaJournalSaved={() => {
+                setStatsRefreshKey((k) => k + 1);
+                void Promise.all([fetchWorldState(), fetchMosaic()]);
+              }}
+              onOpenStudio={() => {
+                setCampusQuest(null);
+                setStudioOpen(true);
+              }}
               onOpenMosaic={() => navigateTab('mosaic')}
               onOpenCustomizer={() => setCustomizerOpen(true)}
               onToggleDarkMode={() => setDarkMode((d) => !d)}
@@ -639,7 +655,17 @@ export default function App() {
                       embedded
                       onSelectEntry={(entry) => setWorldEntry(entry)}
                       onOpenMinigame={(entry) => setMinigameEntry(entry)}
-                      onOpenStudio={() => setStudioOpen(true)}
+                      userId={user?.id}
+                      roomId={worldData?.room.id}
+                      campusQuestSaved={campusQuestSaved}
+                      onCampusQuest={(quest) => {
+                        setCampusQuest(quest);
+                        setStudioOpen(true);
+                      }}
+                      onOpenStudio={() => {
+                        setCampusQuest(null);
+                        setStudioOpen(true);
+                      }}
                       onOpenCustomizer={() => setCustomizerOpen(true)}
                     />
                   )}
@@ -722,7 +748,10 @@ export default function App() {
           userSubmittedToday={userSubmittedToday}
           progression={progression}
           darkMode={darkMode}
-          onClose={() => setStudioOpen(false)}
+          onClose={() => {
+            setStudioOpen(false);
+            setCampusQuest(null);
+          }}
           onOpenWorld={(entry) => setWorldEntry(entry)}
           onOpenInvite={() => {
             setStudioOpen(false);
@@ -734,6 +763,11 @@ export default function App() {
             await Promise.all([fetchWorldState(), fetchMosaic(today)]);
           }}
           onWorldProgressed={handleWorldProgressed}
+          campusQuest={campusQuest}
+          onCampusQuestSaved={(questId) => {
+            setCampusQuestSaved({ questId, nonce: Date.now() });
+            setStatsRefreshKey((k) => k + 1);
+          }}
         />
       )}
 

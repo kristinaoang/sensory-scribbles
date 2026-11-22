@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { Pool } from 'pg';
+import { helpUsageLine } from './guideSafety';
 import type {
   AnonymousUser,
   CanvasStroke,
@@ -58,6 +59,8 @@ export async function initDatabase(): Promise<void> {
       await pool.query(sql);
     }
     await pool.query('ALTER TABLE canvas_strokes ADD COLUMN IF NOT EXISTS chapter_number INTEGER NOT NULL DEFAULT 1');
+    await ensureGuideSchema();
+    await ensureCampusSchema();
     return;
   }
 
@@ -199,6 +202,8 @@ export async function initDatabase(): Promise<void> {
   if (!strokeCols.some((c) => c.name === 'chapter_number')) {
     db.exec('ALTER TABLE canvas_strokes ADD COLUMN chapter_number INTEGER NOT NULL DEFAULT 1');
   }
+  await ensureGuideSchema();
+  await ensureCampusSchema();
 }
 
 function generateInviteCode(): string {
@@ -259,6 +264,7 @@ function mapEntry(row: any): JournalEntry {
     isDemo: Boolean(row.is_demo),
     solanaTx: row.solana_tx ?? null,
     solanaHash: row.solana_hash ?? null,
+    questId: row.quest_id ?? null,
     authorDisplayName: row.author_display_name ?? undefined,
     authorAvatarColor: row.author_avatar_color ?? undefined,
     promptText: row.prompt_text ?? undefined,
@@ -1643,5 +1649,223 @@ export async function syncLegacyQuestsToTemplates(): Promise<void> {
       }
     }
   }
+}
+
+async function ensureGuideSchema(): Promise<void> {
+  if (USE_POSTGRES) {
+    await getPg().query(`
+      CREATE TABLE IF NOT EXISTS guide_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        room_id TEXT,
+        event_type TEXT NOT NULL,
+        detail TEXT,
+        created_at TIMESTAMPTZ NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_guide_events_user ON guide_events(user_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS quest_prompt_cache (
+        quest_id TEXT PRIMARY KEY,
+        prompt TEXT NOT NULL,
+        generated_at TIMESTAMPTZ NOT NULL
+      );
+      ALTER TABLE entries ADD COLUMN IF NOT EXISTS quest_id TEXT;
+      ALTER TABLE canvas_strokes ADD COLUMN IF NOT EXISTS quest_id TEXT;
+    `);
+    return;
+  }
+  const db = getSqlite();
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS guide_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      room_id TEXT,
+      event_type TEXT NOT NULL,
+      detail TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_guide_events_user ON guide_events(user_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS quest_prompt_cache (
+      quest_id TEXT PRIMARY KEY,
+      prompt TEXT NOT NULL,
+      generated_at TEXT NOT NULL
+    );
+  `);
+  for (const table of ['entries', 'canvas_strokes']) {
+    const cols = db.prepare(`PRAGMA table_info('${table}')`).all() as Array<{ name: string }>;
+    if (!cols.some((col) => col.name === 'quest_id')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN quest_id TEXT`);
+    }
+  }
+}
+
+export async function tagCreationQuest(entryId: string, strokeId: string | null, questId: string): Promise<void> {
+  if (!/^[a-z0-9-]{1,48}$/.test(questId)) return;
+  if (USE_POSTGRES) {
+    await getPg().query('UPDATE entries SET quest_id = $1 WHERE id = $2', [questId, entryId]);
+    if (strokeId) {
+      await getPg().query('UPDATE canvas_strokes SET quest_id = $1 WHERE id = $2', [questId, strokeId]);
+    }
+    return;
+  }
+  getSqlite().prepare('UPDATE entries SET quest_id = ? WHERE id = ?').run(questId, entryId);
+  if (strokeId) {
+    getSqlite().prepare('UPDATE canvas_strokes SET quest_id = ? WHERE id = ?').run(questId, strokeId);
+  }
+}
+
+export async function recordGuideEvent(params: {
+  userId: string;
+  roomId?: string | null;
+  eventType: 'help_used' | 'animal_interaction';
+  detail: string;
+}): Promise<{ id: string; createdAt: string }> {
+  const id = `ge_${crypto.randomUUID().slice(0, 12)}`;
+  const createdAt = new Date().toISOString();
+  const detail = params.detail.slice(0, 32);
+  if (USE_POSTGRES) {
+    await getPg().query(
+      'INSERT INTO guide_events (id, user_id, room_id, event_type, detail, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, params.userId, params.roomId || null, params.eventType, detail, createdAt],
+    );
+    return { id, createdAt };
+  }
+  getSqlite()
+    .prepare('INSERT INTO guide_events (id, user_id, room_id, event_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, params.userId, params.roomId || null, params.eventType, detail, createdAt);
+  return { id, createdAt };
+}
+
+export async function getHelpUsageForUser(userId: string): Promise<{ thisWeek: number; earlierWeeks: number; line: string }> {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  let thisWeek = 0;
+  let earlierWeeks = 0;
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT
+         COUNT(*) FILTER (WHERE created_at >= $2::timestamptz) AS this_week,
+         COUNT(*) FILTER (WHERE created_at < $2::timestamptz) AS earlier_weeks
+       FROM guide_events
+       WHERE user_id = $1 AND event_type = 'help_used'`,
+      [userId, cutoff],
+    );
+    thisWeek = Number(rows[0]?.this_week || 0);
+    earlierWeeks = Number(rows[0]?.earlier_weeks || 0);
+  } else {
+    const row = getSqlite()
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS this_week,
+           SUM(CASE WHEN created_at < ? THEN 1 ELSE 0 END) AS earlier_weeks
+         FROM guide_events
+         WHERE user_id = ? AND event_type = 'help_used'`,
+      )
+      .get(cutoff, cutoff, userId) as { this_week?: number; earlier_weeks?: number } | undefined;
+    thisWeek = Number(row?.this_week || 0);
+    earlierWeeks = Number(row?.earlier_weeks || 0);
+  }
+  return { thisWeek, earlierWeeks, line: helpUsageLine(thisWeek, earlierWeeks) };
+}
+
+export async function getCachedQuestPrompt(questId: string): Promise<string | null> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query('SELECT prompt FROM quest_prompt_cache WHERE quest_id = $1', [questId]);
+    return rows[0]?.prompt ? String(rows[0].prompt) : null;
+  }
+  const row = getSqlite().prepare('SELECT prompt FROM quest_prompt_cache WHERE quest_id = ?').get(questId) as { prompt?: string } | undefined;
+  return row?.prompt ? String(row.prompt) : null;
+}
+
+export async function saveCachedQuestPrompt(questId: string, prompt: string): Promise<void> {
+  const now = new Date().toISOString();
+  if (USE_POSTGRES) {
+    await getPg().query(
+      `INSERT INTO quest_prompt_cache (quest_id, prompt, generated_at) VALUES ($1, $2, $3)
+       ON CONFLICT (quest_id) DO UPDATE SET prompt = EXCLUDED.prompt, generated_at = EXCLUDED.generated_at`,
+      [questId, prompt, now],
+    );
+    return;
+  }
+  getSqlite()
+    .prepare(
+      `INSERT INTO quest_prompt_cache (quest_id, prompt, generated_at) VALUES (?, ?, ?)
+       ON CONFLICT(quest_id) DO UPDATE SET prompt = excluded.prompt, generated_at = excluded.generated_at`,
+    )
+    .run(questId, prompt, now);
+}
+
+async function ensureCampusSchema(): Promise<void> {
+  if (USE_POSTGRES) {
+    await getPg().query(`
+      CREATE TABLE IF NOT EXISTS campus_wander_choices (
+        room_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        place_id TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        PRIMARY KEY (room_id, user_id)
+      );
+    `);
+    return;
+  }
+  getSqlite().exec(`
+    CREATE TABLE IF NOT EXISTS campus_wander_choices (
+      room_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      place_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (room_id, user_id)
+    );
+  `);
+}
+
+export async function listUserQuestIds(roomId: string, userId: string): Promise<string[]> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT DISTINCT quest_id FROM entries
+       WHERE room_id = $1 AND user_id = $2 AND flagged = FALSE AND quest_id IS NOT NULL`,
+      [roomId, userId],
+    );
+    return rows.map((row) => String(row.quest_id));
+  }
+  const rows = getSqlite()
+    .prepare(
+      `SELECT DISTINCT quest_id FROM entries
+       WHERE room_id = ? AND user_id = ? AND flagged = 0 AND quest_id IS NOT NULL`,
+    )
+    .all(roomId, userId) as Array<{ quest_id: string }>;
+  return rows.map((row) => String(row.quest_id));
+}
+
+export async function getCampusWanderChoice(roomId: string, userId: string): Promise<string | null> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      'SELECT place_id FROM campus_wander_choices WHERE room_id = $1 AND user_id = $2',
+      [roomId, userId],
+    );
+    return rows[0]?.place_id ? String(rows[0].place_id) : null;
+  }
+  const row = getSqlite()
+    .prepare('SELECT place_id FROM campus_wander_choices WHERE room_id = ? AND user_id = ?')
+    .get(roomId, userId) as { place_id?: string } | undefined;
+  return row?.place_id ? String(row.place_id) : null;
+}
+
+export async function setCampusWanderChoice(roomId: string, userId: string, placeId: string): Promise<void> {
+  const now = new Date().toISOString();
+  if (USE_POSTGRES) {
+    await getPg().query(
+      `INSERT INTO campus_wander_choices (room_id, user_id, place_id, created_at)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (room_id, user_id) DO UPDATE SET place_id = EXCLUDED.place_id, created_at = EXCLUDED.created_at`,
+      [roomId, userId, placeId, now],
+    );
+    return;
+  }
+  getSqlite()
+    .prepare(
+      `INSERT INTO campus_wander_choices (room_id, user_id, place_id, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(room_id, user_id) DO UPDATE SET place_id = excluded.place_id, created_at = excluded.created_at`,
+    )
+    .run(roomId, userId, placeId, now);
 }
 

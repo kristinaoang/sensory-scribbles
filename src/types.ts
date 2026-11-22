@@ -75,6 +75,7 @@ export interface JournalEntry {
   isDemo: boolean;
   solanaTx?: string | null;
   solanaHash?: string | null;
+  questId?: string | null;
   // Joined fields for UI display
   authorDisplayName?: string;
   authorAvatarColor?: string;

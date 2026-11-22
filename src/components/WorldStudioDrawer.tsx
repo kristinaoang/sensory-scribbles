@@ -18,6 +18,8 @@ interface WorldStudioDrawerProps {
   onOpenInvite: () => void;
   onDailyEntrySubmitted: (todayIso: string) => Promise<void> | void;
   onWorldProgressed: (payload: WorldProgressEventPayload) => void;
+  campusQuest?: { id: string; title: string; prompt: string; type?: string } | null;
+  onCampusQuestSaved?: (questId: string) => void;
 }
 
 export const WorldStudioDrawer: React.FC<WorldStudioDrawerProps> = ({
@@ -35,6 +37,8 @@ export const WorldStudioDrawer: React.FC<WorldStudioDrawerProps> = ({
   onOpenInvite,
   onDailyEntrySubmitted,
   onWorldProgressed,
+  campusQuest = null,
+  onCampusQuestSaved,
 }) => {
   useEffect(() => {
     if (!open) return;
@@ -69,7 +73,7 @@ export const WorldStudioDrawer: React.FC<WorldStudioDrawerProps> = ({
               Stage {progression?.level ?? 1} · {progression?.stageName || 'Seed Clearing'}
             </div>
             <h2 className="text-base sm:text-lg font-semibold font-display text-[#1F2A3C] dark:text-white truncate">
-              Expand {room.name} Together
+              {campusQuest ? campusQuest.title : `Expand ${room.name} Together`}
             </h2>
           </div>
 
@@ -112,6 +116,8 @@ export const WorldStudioDrawer: React.FC<WorldStudioDrawerProps> = ({
             onOpenInvite={onOpenInvite}
             onDailyEntrySubmitted={onDailyEntrySubmitted}
             onWorldProgressed={onWorldProgressed}
+            campusQuest={campusQuest}
+            onCampusQuestSaved={onCampusQuestSaved}
           />
         </div>
       </div>

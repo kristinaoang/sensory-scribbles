@@ -273,6 +273,8 @@ interface SharedReflectionCanvasProps {
   onOpenInvite: () => void;
   onDailyEntrySubmitted: (todayIso: string) => Promise<void> | void;
   onWorldProgressed?: (payload: WorldProgressEventPayload) => void;
+  campusQuest?: { id: string; title: string; prompt: string; type?: string } | null;
+  onCampusQuestSaved?: (questId: string) => void;
 }
 
 export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
@@ -290,6 +292,8 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
   onOpenInvite,
   onDailyEntrySubmitted,
   onWorldProgressed,
+  campusQuest = null,
+  onCampusQuestSaved,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -504,8 +508,9 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
     : activeQuest;
 
   const displayedStrokes = strokes.filter((s) => (s.chapterNumber ?? 1) === displayedChapter);
-  const drawingPromptText =
-    displayedQuest?.drawingPrompt || 'A cozy house with a chimney, front door, and garden path';
+  const drawingPromptText = campusQuest
+    ? campusQuest.prompt
+    : displayedQuest?.drawingPrompt || 'A cozy house with a chimney, front door, and garden path';
 
   // Render subtle tangible guide outline + displayed chapter strokes + live draft stroke + remote cursors
   const redrawCanvas = useCallback(() => {
@@ -921,12 +926,13 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
         const res = await fetch('/api/entries', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+            body: JSON.stringify({
             roomId: room.id,
             userId: user.id,
             sentence: trimmed,
             strokeJson: strokePayload,
             publishToCanvas: true,
+            questId: campusQuest?.id,
           }),
         });
         const data = await res.json();
@@ -951,6 +957,7 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
         }
         setReflection('');
         setDraftPoints([]);
+        if (campusQuest) onCampusQuestSaved?.(campusQuest.id);
         await onDailyEntrySubmitted(todayDate);
         setFeedback({
           type: 'success',
@@ -965,13 +972,14 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
         const res = await fetch('/api/world/answer', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+            body: JSON.stringify({
             roomId: room.id,
             userId: user.id,
             displayName: user.displayName,
             avatarColor: user.avatarColor,
             sentence: trimmed,
             strokeJson: strokePayload,
+            questId: campusQuest?.id,
           }),
         });
         const data = await res.json();
@@ -996,11 +1004,14 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
         }
         setReflection('');
         setDraftPoints([]);
+        if (campusQuest) onCampusQuestSaved?.(campusQuest.id);
         setFeedback({
           type: 'success',
           text: data.justExpanded
             ? `World expanded to Stage ${data.progression.level}! Unlocked ${data.justExpanded.title}.`
-            : 'Added your answer-stroke to the drawing and rose a new 3D landmark!',
+            : campusQuest
+              ? 'Saved. Your drawing is waiting on the campus.'
+              : 'Added your answer-stroke to the drawing and rose a new 3D landmark!',
         });
       }
     } catch {
@@ -1029,11 +1040,13 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
     onOpenWorld(entryLike);
   };
 
-  const activeQuestionText = isViewingPrevious
-    ? displayedQuest?.questionPrompt || 'Previous level sensory question'
-    : activeQuest?.questionPrompt ||
-      prompt?.text ||
-      'If your day were a room, what would be inside it?';
+  const activeQuestionText = campusQuest
+    ? campusQuest.prompt
+    : isViewingPrevious
+      ? displayedQuest?.questionPrompt || 'Previous level sensory question'
+      : activeQuest?.questionPrompt ||
+        prompt?.text ||
+        'If your day were a room, what would be inside it?';
 
   return (
     <section
@@ -1164,6 +1177,7 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
             </div>
             <h1
               id="daily-prompt-heading"
+              data-testid="campus-quest-prompt"
               className={`${compact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl'} font-semibold text-[#1F2A3C] dark:text-white leading-snug text-balance`}
             >
               {activeQuestionText}

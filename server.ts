@@ -4,8 +4,10 @@ import express from 'express';
 import fs from 'fs';
 import http from 'http';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
+import { animalReply, drawWriteIdeas, wordQuestPrompt } from './src/mastra/childGuide';
 import { runMastraNightlyWorkflow } from './src/mastra/nightlyWorkflow';
 import {
   claimAdminPassword,
@@ -28,6 +30,7 @@ import {
   getRoomById,
   getRoomByInviteCode,
   getRoomProgression,
+  getHelpUsageForUser,
   getUserById,
   getUserRoomStreak,
   getUserWeeklyMinigameAccuracy,
@@ -40,6 +43,7 @@ import {
   isPostgresMode,
   recordMinigameEvent,
   setEntryFlagged,
+  tagCreationQuest,
   updateEntrySolanaAnchor,
   updateRoomSolana,
   upsertPrompt,
@@ -51,6 +55,8 @@ import {
   moderateSentence,
   transcribeSpokenAudio,
 } from './src/server/gemini';
+import { mountCampusJournalRoutes } from './src/server/campusJournal';
+import { mountGuideRoutes } from './src/server/guideRoutes';
 import { seedCanvasStrokesIfEmpty, seedDemoDataIfEmpty, seedQuestsIfEmpty } from './src/server/seed';
 import { anchorEntryToSolanaDevnet, getSolanaConfigStatus } from './src/server/solana';
 import type { StrokeData } from './src/types';
@@ -250,7 +256,27 @@ async function startServer() {
       ok: true,
       database: isPostgresMode() ? 'timescaledb' : 'sqlite-local',
       solana: await getSolanaConfigStatus(),
+      childGuide: Boolean(process.env.GEMINI_CHILD_MODEL && process.env.GEMINI_SAFETY_MODEL),
     });
+  });
+
+  app.post('/api/child/quest-prompt', async (req, res) => {
+    const place = typeof req.body?.place === 'string' ? req.body.place : undefined;
+    const result = await wordQuestPrompt(place);
+    res.json({ prompt: result.text, source: result.source });
+  });
+
+  app.post('/api/child/draw-ideas', async (req, res) => {
+    const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : undefined;
+    const result = await drawWriteIdeas(prompt);
+    res.json({ ideas: result.ideas, source: result.source });
+  });
+
+  app.post('/api/child/animal-reply', async (req, res) => {
+    const animal = typeof req.body?.animal === 'string' ? req.body.animal : undefined;
+    const note = typeof req.body?.note === 'string' ? req.body.note : undefined;
+    const result = await animalReply(animal, note);
+    res.json({ reply: result.reply, safe: result.safe, source: result.source });
   });
 
   // Voice-to-text transcription for spoken prompt answers (server-side Gemini 3.5 Transcribe)
@@ -535,6 +561,12 @@ async function startServer() {
         createdAt: created.createdAt,
       });
 
+      const questId = String(req.body?.questId || '');
+      if (questId) {
+        await tagCreationQuest(created.id, createdCanvasStroke?.id ?? null, questId);
+        created.questId = questId;
+      }
+
       const { progression, justExpanded } = await incrementQuestProgress(room.id, { answers: 1, strokes: 1 });
       const enrichedEntry = {
         ...created,
@@ -657,6 +689,12 @@ async function startServer() {
         isDemo: false,
       });
 
+      const questId = String(req.body?.questId || '');
+      if (questId) {
+        await tagCreationQuest(created.id, null, questId);
+        created.questId = questId;
+      }
+
       // Milestone 10: Opt-in server-sponsored Solana Devnet anchor (hash + timestamp only)
       let solanaResult = null;
       if (room.solanaEnabled) {
@@ -688,6 +726,9 @@ async function startServer() {
           createdAt: created.createdAt,
         });
         broadcastToRoom(room.id, { type: 'stroke:created', stroke: createdCanvasStroke });
+        if (questId && createdCanvasStroke) {
+          await tagCreationQuest(created.id, createdCanvasStroke.id, questId);
+        }
       }
 
       // Advance unified progression quest for answering & drawing on the shared canvas
@@ -768,15 +809,17 @@ async function startServer() {
       const userId = String(req.query.userId || '');
       const roomCode = String(req.query.roomCode || 'CEDAR-402').trim().toUpperCase();
       const room = await getRoomByCode(roomCode);
-      const [weeklyAccuracy, dailyRoomCounts, streak] = await Promise.all([
+      const [weeklyAccuracy, dailyRoomCounts, streak, helpUsage] = await Promise.all([
         userId ? getUserWeeklyMinigameAccuracy(userId) : Promise.resolve([]),
         room ? getDailyRoomEntryCounts(room.id) : Promise.resolve([]),
         userId && room ? getUserRoomStreak(userId, room.id) : Promise.resolve(null),
+        userId ? getHelpUsageForUser(userId) : Promise.resolve(null),
       ]);
       res.json({
         weeklyAccuracy,
         dailyRoomCounts,
         streak,
+        helpUsage,
         databaseEngine: isPostgresMode() ? 'TimescaleDB time_bucket() continuous aggregates' : 'SQLite local time_bucket() view',
       });
     } catch (err: any) {
@@ -1052,6 +1095,21 @@ async function startServer() {
       res.status(500).json({ error: err?.message || 'Failed to publish stroke to shared canvas.' });
     }
   });
+
+  mountGuideRoutes(app);
+  mountCampusJournalRoutes(app);
+  const guideCors = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const origin = String(req.headers.origin || '');
+    if (/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    }
+    next();
+  };
+  const serverDir = path.dirname(fileURLToPath(import.meta.url));
+  app.use('/content', guideCors, express.static(path.join(serverDir, 'content')));
+  app.use('/campus-guide', guideCors, express.static(path.join(serverDir, 'public', 'campus-guide')));
+  app.use('/audio', guideCors, express.static(path.join(serverDir, 'public', 'audio')));
 
   // Vite dev middleware or static dist serving
   if (process.env.NODE_ENV !== 'production') {

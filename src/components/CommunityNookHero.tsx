@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   BarChart3,
   Check,
@@ -49,6 +49,20 @@ export const CommunityNookHero: React.FC<CommunityNookHeroProps> = ({
   const [profileColor, setProfileColor] = useState(user.avatarColor);
   const [saving, setSaving] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [openAreasLine, setOpenAreasLine] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/campus/unlocks?roomId=${encodeURIComponent(room.id)}&userId=${encodeURIComponent(user.id)}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && typeof data?.parentLine === 'string') setOpenAreasLine(data.parentLine);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [room.id, user.id]);
 
   const handleCopyInvite = async () => {
     try {
@@ -153,6 +167,11 @@ export const CommunityNookHero: React.FC<CommunityNookHeroProps> = ({
                 <span aria-hidden="true">·</span>
                 <span>Invite: {room.inviteCode}</span>
               </div>
+              {openAreasLine ? (
+                <p data-testid="campus-open-areas-room" className="pt-1 text-center text-xs text-[#4C5568] dark:text-[#CBD5EB]">
+                  {openAreasLine}
+                </p>
+              ) : null}
             </div>
 
             {/* Quick Invite / Switch Actions */}

@@ -1,0 +1,54 @@
+{
+  "areas": [
+    {
+      "id": "arrival-green",
+      "name": "Arrival Green",
+      "prompt": "Draw the quietest thing you can see.",
+      "welcome": "The green is open. Take a slow look around."
+    },
+    {
+      "id": "lake-path",
+      "name": "Lake Path",
+      "prompt": "Write three colors you see in the water.",
+      "welcome": "The lake path is open. The water is there when you want it."
+    },
+    {
+      "id": "tower-court",
+      "name": "Tower Court",
+      "prompt": "Draw one tall shape and one small shape.",
+      "welcome": "Tower Court is open. Look up, then look down."
+    },
+    {
+      "id": "library-steps",
+      "name": "Library Steps",
+      "prompt": "Write a sound you hear on the steps.",
+      "welcome": "The library steps are open. Listen for one sound."
+    },
+    {
+      "id": "chapel-garden",
+      "name": "Chapel Garden",
+      "prompt": "Draw something soft you can see nearby.",
+      "welcome": "Chapel Garden is open. Soft things count here."
+    }
+  ],
+  "nextPlaces": [
+    {
+      "id": "quiet-drawing-room",
+      "label": "A quiet drawing room",
+      "welcome": "The drawing room is not a map yet. Your page can sit here with you.",
+      "note": "Not on the map yet"
+    },
+    {
+      "id": "animal-path",
+      "label": "The animal path",
+      "welcome": "The animal path is still a path on paper. We can wonder who might walk by.",
+      "note": "Not on the map yet"
+    },
+    {
+      "id": "story-i-start",
+      "label": "A story I start",
+      "welcome": "The story place is not built yet. One sentence is a fine way to begin.",
+      "note": "Not on the map yet"
+    }
+  ]
+}

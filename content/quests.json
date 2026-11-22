@@ -1,0 +1,55 @@
+{
+  "quests": [
+    {
+      "id": "pet-the-dog",
+      "title": "Pet the dog?",
+      "prompt": "Draw the dog's soft ears and the warm grass under your shoes.",
+      "type": "both",
+      "x": 10,
+      "z": -2,
+      "radius": 5.5,
+      "nodeId": "dog",
+      "hint": "Head toward the campus dog.",
+      "narrationId": "hint-pet-the-dog",
+      "ideas": [
+        "Draw the dog's ears in the sun.",
+        "Write about the dog's warm fur.",
+        "Sketch the grass by the dog's paws."
+      ]
+    },
+    {
+      "id": "watch-the-lake",
+      "title": "Watch the lake?",
+      "prompt": "Watch the lake and draw one bright ripple you see.",
+      "type": "draw",
+      "x": -22,
+      "z": 58,
+      "radius": 8,
+      "nodeId": "lake",
+      "hint": "Head toward the lake path.",
+      "narrationId": "hint-watch-the-lake",
+      "ideas": [
+        "Draw one bright ripple on the lake.",
+        "Write the color of the water.",
+        "Sketch a leaf floating by the shore."
+      ]
+    },
+    {
+      "id": "look-up-tower",
+      "title": "Look up at the tower?",
+      "prompt": "Look up at the tower and write the color of the stone.",
+      "type": "write",
+      "x": -46,
+      "z": 34,
+      "radius": 7,
+      "nodeId": "tower",
+      "hint": "Head toward the stone tower.",
+      "narrationId": "hint-look-up-tower",
+      "ideas": [
+        "Draw the tower against the sky.",
+        "Write the color of the stone.",
+        "Sketch the windows climbing the tower."
+      ]
+    }
+  ]
+}
