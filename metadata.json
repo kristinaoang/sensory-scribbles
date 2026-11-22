@@ -1,0 +1,10 @@
+{
+  "name": "Remix Sensory Scribbles",
+  "description": "A daily sensory reflection room where each friend answers one tactile prompt with a single sentence and continuous word-stroke, shaping a shared 3D world and mosaic.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,121 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    background-color: #8AD2A7;
+    color: #1F2A3C;
+    scroll-behavior: smooth;
+  }
+
+  html.dark {
+    background-color: #1C2541;
+    color: #F3F6FC;
+  }
+
+  h1, h2, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono-tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Respect reduced motion across UI transitions */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Cozy coastal-meadow backdrop inspired by Daylight & Twilight community cards */
+.bg-nook-meadow {
+  background-color: #8AD2A7;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cpolygon points='16,14 23,26 9,26' fill='%2378C396' opacity='0.55'/%3E%3Ccircle cx='54' cy='22' r='3' fill='%23A8E6BF' opacity='0.6'/%3E%3Cpolygon points='76,42 84,54 68,54' fill='%2374BE92' opacity='0.5'/%3E%3Cpolygon points='34,68 41,80 27,80' fill='%23A2E2B9' opacity='0.55'/%3E%3Ccircle cx='78' cy='82' r='2.5' fill='%2374BE92' opacity='0.55'/%3E%3Ccircle cx='18' cy='58' r='2.5' fill='%23A8E6BF' opacity='0.55'/%3E%3C/svg%3E");
+  background-size: 96px 96px;
+}
+
+.dark .bg-nook-meadow {
+  background-color: #1C2541;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'%3E%3Cpolygon points='16,14 23,26 9,26' fill='%2329365E' opacity='0.7'/%3E%3Ccircle cx='54' cy='22' r='2.5' fill='%233A4B7C' opacity='0.65'/%3E%3Cpolygon points='76,42 84,54 68,54' fill='%23263258' opacity='0.65'/%3E%3Cpolygon points='34,68 41,80 27,80' fill='%23334372' opacity='0.6'/%3E%3Ccircle cx='78' cy='82' r='2' fill='%23F8E166' opacity='0.22'/%3E%3Ccircle cx='18' cy='58' r='2' fill='%237CD4C0' opacity='0.2'/%3E%3C/svg%3E");
+  background-size: 96px 96px;
+}
+
+/* Top sunny diagonally-striped awning band (matches coastal meadow header border) */
+.nook-sunny-awning {
+  background-color: #FCE588;
+  background-image: repeating-linear-gradient(
+    125deg,
+    #FCE588 0px,
+    #FCE588 18px,
+    #F6D45C 18px,
+    #F6D45C 36px
+  );
+}
+
+.dark .nook-sunny-awning {
+  background-color: #263156;
+  background-image: repeating-linear-gradient(
+    125deg,
+    #263156 0px,
+    #263156 18px,
+    #2E3B66 18px,
+    #2E3B66 36px
+  );
+}
+
+/* Bottom wavy ocean strip */
+.nook-ocean-footer {
+  background-color: #9BD8EC;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='48' viewBox='0 0 120 48'%3E%3Cpath d='M0 10 Q15 0 30 10 T60 10 T90 10 T120 10 V48 H0 Z' fill='%2385C9E2' opacity='0.75'/%3E%3Cpolygon points='22,30 28,22 34,30' fill='%23599AC0' opacity='0.48'/%3E%3Cpolygon points='36,30 42,22 48,30' fill='%23599AC0' opacity='0.48'/%3E%3Cpolygon points='82,36 88,28 94,36' fill='%23599AC0' opacity='0.48'/%3E%3C/svg%3E");
+  background-size: 120px 48px;
+}
+
+.dark .nook-ocean-footer {
+  background-color: #161E38;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='48' viewBox='0 0 120 48'%3E%3Cpath d='M0 10 Q15 0 30 10 T60 10 T90 10 T120 10 V48 H0 Z' fill='%231E294D' opacity='0.85'/%3E%3Cpolygon points='22,30 28,22 34,30' fill='%2343659E' opacity='0.35'/%3E%3Cpolygon points='82,36 88,28 94,36' fill='%2343659E' opacity='0.35'/%3E%3C/svg%3E");
+  background-size: 120px 48px;
+}
+
+/* Signature yellow folded ribbon nameplate */
+.nook-ribbon {
+  position: relative;
+  background: linear-gradient(180deg, #FBE774 0%, #F5DA55 100%);
+  color: #242E47;
+  box-shadow: 0 2px 0 rgba(196, 162, 34, 0.45);
+}
+
+.nook-ribbon::before,
+.nook-ribbon::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  width: 14px;
+  height: calc(100% - 4px);
+  background: #E7C63F;
+  z-index: -1;
+  border-radius: 3px;
+}
+
+.nook-ribbon::before {
+  left: -8px;
+  transform: skewY(8deg);
+}
+
+.nook-ribbon::after {
+  right: -8px;
+  transform: skewY(-8deg);
+}
