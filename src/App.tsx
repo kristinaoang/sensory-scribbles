@@ -27,6 +27,7 @@ import type {
   MosaicResponse,
   Room,
   RoomQuest,
+  TamedAnimalRecord,
   WorldStateResponse,
 } from './types';
 
@@ -185,6 +186,9 @@ export default function App() {
       if (res.ok) {
         const data: WorldStateResponse = await res.json();
         setWorldData(data);
+        if (typeof data.userPoints === 'number') {
+          setUser((u) => (u ? { ...u, affectionPoints: data.userPoints! } : u));
+        }
       } else {
         setLoadError('Could not load 3D room world right now.');
       }
@@ -242,6 +246,9 @@ export default function App() {
       };
     });
 
+    if (typeof payload.affectionPoints === 'number') {
+      setUser((u) => (u ? { ...u, affectionPoints: payload.affectionPoints! } : u));
+    }
     if (payload.justExpanded) {
       setJustExpandedQuest(payload.justExpanded);
     }
@@ -286,6 +293,25 @@ export default function App() {
               justExpanded: msg.justExpanded ?? null,
               entry: msg.entry,
               stroke: msg.stroke,
+            });
+          } else if (msg.type === 'animal:tamed' && msg.tamedAnimal) {
+            const incoming = msg.tamedAnimal as TamedAnimalRecord;
+            setWorldData((prev) => {
+              if (!prev) return prev;
+              const existing = prev.tamedAnimals ?? [];
+              const filtered = existing.filter((t) => t.animalKey !== incoming.animalKey);
+              return { ...prev, tamedAnimals: [...filtered, incoming] };
+            });
+          } else if (msg.type === 'animal:petted' && msg.animalKey && typeof msg.animalAffection === 'number') {
+            setWorldData((prev) => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                animalAffections: {
+                  ...(prev.animalAffections ?? {}),
+                  [msg.animalKey]: msg.animalAffection,
+                },
+              };
             });
           }
         } catch {
@@ -476,11 +502,16 @@ export default function App() {
 
           {worldData && user ? (
             <RoomWorld3D
+              roomId={worldData.room.id}
               roomName={worldData.room.name}
               roomCode={worldData.room.code}
+              userId={user.id}
               entries={worldData.entries}
               strokes={worldData.strokes}
               progression={worldData.progression}
+              tamedAnimals={worldData.tamedAnimals ?? []}
+              animalAffections={worldData.animalAffections ?? {}}
+              userPoints={user.affectionPoints ?? 0}
               darkMode={darkMode}
               presenceCount={presenceCount}
               userAvatarColor={user.avatarColor}
@@ -493,6 +524,23 @@ export default function App() {
               onOpenMosaic={() => navigateTab('mosaic')}
               onOpenCustomizer={() => setCustomizerOpen(true)}
               onToggleDarkMode={() => setDarkMode((d) => !d)}
+              onUserPointsChange={(pts) => {
+                setUser((u) => (u ? { ...u, affectionPoints: pts } : u));
+              }}
+              onAnimalAffectionChange={(animalKey, affection) => {
+                setWorldData((prev) =>
+                  prev
+                    ? { ...prev, animalAffections: { ...(prev.animalAffections ?? {}), [animalKey]: affection } }
+                    : prev,
+                );
+              }}
+              onAnimalTamed={(record) => {
+                setWorldData((prev) => {
+                  if (!prev) return prev;
+                  const filtered = (prev.tamedAnimals ?? []).filter((t) => t.animalKey !== record.animalKey);
+                  return { ...prev, tamedAnimals: [...filtered, record] };
+                });
+              }}
             />
           ) : !loadError ? (
             <div className="flex-1 flex items-center justify-center p-12 text-center text-sm text-[#4C5568] dark:text-[#CBD5EB]">
@@ -627,11 +675,16 @@ export default function App() {
                     />
                   ) : (
                     <RoomWorld3D
+                      roomId={mosaicData.room.id}
                       roomName={mosaicData.room.name}
                       roomCode={mosaicData.room.code}
+                      userId={user?.id}
                       entries={worldData?.entries ?? mosaicData.entries}
                       strokes={worldData?.strokes ?? []}
                       progression={worldData?.progression ?? mosaicData.progression}
+                      tamedAnimals={worldData?.tamedAnimals ?? []}
+                      animalAffections={worldData?.animalAffections ?? {}}
+                      userPoints={user?.affectionPoints ?? 0}
                       darkMode={darkMode}
                       presenceCount={presenceCount}
                       userAvatarColor={user?.avatarColor}
@@ -641,6 +694,23 @@ export default function App() {
                       onOpenMinigame={(entry) => setMinigameEntry(entry)}
                       onOpenStudio={() => setStudioOpen(true)}
                       onOpenCustomizer={() => setCustomizerOpen(true)}
+                      onUserPointsChange={(pts) => {
+                        setUser((u) => (u ? { ...u, affectionPoints: pts } : u));
+                      }}
+                      onAnimalAffectionChange={(animalKey, affection) => {
+                        setWorldData((prev) =>
+                          prev
+                            ? { ...prev, animalAffections: { ...(prev.animalAffections ?? {}), [animalKey]: affection } }
+                            : prev,
+                        );
+                      }}
+                      onAnimalTamed={(record) => {
+                        setWorldData((prev) => {
+                          if (!prev) return prev;
+                          const filtered = (prev.tamedAnimals ?? []).filter((t) => t.animalKey !== record.animalKey);
+                          return { ...prev, tamedAnimals: [...filtered, record] };
+                        });
+                      }}
                     />
                   )}
                 </div>

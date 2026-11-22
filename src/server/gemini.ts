@@ -1,5 +1,5 @@
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import type { JournalEntry, SensoryWorldSpec } from '../types';
+import type { JournalEntry, SensoryWorldSpec, WildAnimalSpec } from '../types';
 
 function getAiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -511,4 +511,61 @@ export async function transcribeSpokenAudio(audioBase64: string, rawMimeType: st
   }
 
   throw lastError;
+}
+
+export interface AnimalTameEvaluation {
+  matched: boolean;
+  feedback: string;
+}
+
+export async function evaluateAnimalDescription(
+  animal: WildAnimalSpec,
+  userDescription: string,
+): Promise<AnimalTameEvaluation> {
+  const trimmed = userDescription.trim();
+  if (trimmed.length < 5) {
+    return {
+      matched: false,
+      feedback: `Look a little closer at this ${animal.species}'s colors or features and write a short description.`,
+    };
+  }
+
+  const response = await generateContentWithFallback((model) => ({
+    model,
+    contents: `Target 3D island animal: ${animal.name} (${animal.species})
+Visible appearance summary: ${animal.visualSummary}
+Observable visual traits:
+${animal.visualTraits.map((t) => `- ${t}`).join('\n')}
+
+Player's appearance description: "${trimmed}"`,
+    config: {
+      systemInstruction:
+        'You are a friendly wildlife guide in a cozy 3D island game. Decide whether the player accurately observed and described how the target 3D animal looks based on the provided visible traits. Accept concise or casual descriptions as long as they mention at least one genuine visible detail (such as fur/feather colors, markings, tail, crest, ears, collar, mask, paws, or held item) without contradicting the animal. Reject gibberish, purely generic phrases like "cute animal" with zero visual traits, or descriptions of completely wrong colors/species. Return JSON with matched (boolean) and feedback (1 warm sentence: if matched, praise their observation; if false, give a gentle visual hint about what to notice without listing everything verbatim).',
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          matched: {
+            type: Type.BOOLEAN,
+            description: 'True if the player accurately described at least one visible trait of the animal.',
+          },
+          feedback: {
+            type: Type.STRING,
+            description: 'One friendly sentence responding to the player observation.',
+          },
+        },
+        required: ['matched', 'feedback'],
+      },
+    },
+  }));
+
+  const parsed = JSON.parse((response.text ?? '{}').trim());
+  const matched = Boolean(parsed.matched);
+  const feedback =
+    String(parsed.feedback || '').trim() ||
+    (matched
+      ? `${animal.name} recognizes your gentle attention and trots happily beside you!`
+      : `Take another look at the ${animal.species}'s coat, markings, or tail and describe what you see.`);
+
+  return { matched, feedback };
 }

@@ -256,6 +256,8 @@ export interface WorldProgressEventPayload {
   justExpanded: RoomQuest | null;
   entry?: JournalEntry;
   stroke?: CanvasStroke;
+  awardedPoints?: number;
+  affectionPoints?: number;
 }
 
 interface SharedReflectionCanvasProps {
@@ -947,18 +949,21 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
             justExpanded: data.justExpanded ?? null,
             entry: data.entry,
             stroke: data.canvasStroke,
+            awardedPoints: data.awardedPoints,
+            affectionPoints: data.affectionPoints,
           });
         }
         setReflection('');
         setDraftPoints([]);
         await onDailyEntrySubmitted(todayDate);
+        const ptsText = `+${data.awardedPoints ?? 25} Care Points for animal affection!`;
         setFeedback({
           type: 'success',
           text: data.justExpanded
-            ? `World expanded to Stage ${data.progression.level}! Unlocked ${data.justExpanded.title}.`
+            ? `World expanded to Stage ${data.progression.level}! Unlocked ${data.justExpanded.title}. ${ptsText}`
             : data.solana?.anchored
-              ? 'Your answer-stroke was added to the drawing, 3D world, and anchored on Solana Devnet!'
-              : 'Your answer-stroke was added to the shared drawing and sculpted a 3D landmark!',
+              ? `Your answer-stroke was added to the drawing, 3D world, and Solana Devnet! ${ptsText}`
+              : `Your answer-stroke was added and sculpted a 3D landmark! ${ptsText}`,
         });
       } else {
         // Additional unified contribution: draws answer-stroke on the Shared Canvas + sculpts 3D landmark
@@ -992,15 +997,18 @@ export const SharedReflectionCanvas: React.FC<SharedReflectionCanvasProps> = ({
             justExpanded: data.justExpanded ?? null,
             entry: data.entry,
             stroke: data.canvasStroke,
+            awardedPoints: data.awardedPoints,
+            affectionPoints: data.affectionPoints,
           });
         }
         setReflection('');
         setDraftPoints([]);
+        const ptsText = `+${data.awardedPoints ?? 25} Care Points for animal affection!`;
         setFeedback({
           type: 'success',
           text: data.justExpanded
-            ? `World expanded to Stage ${data.progression.level}! Unlocked ${data.justExpanded.title}.`
-            : 'Added your answer-stroke to the drawing and rose a new 3D landmark!',
+            ? `World expanded to Stage ${data.progression.level}! Unlocked ${data.justExpanded.title}. ${ptsText}`
+            : `Added your answer-stroke to the drawing and rose a new 3D landmark! ${ptsText}`,
         });
       }
     } catch {

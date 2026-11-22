@@ -49,6 +49,7 @@ export interface AnonymousUser {
   id: string;
   displayName: string;
   avatarColor: string;
+  affectionPoints: number;
   createdAt: string;
 }
 
@@ -179,6 +180,36 @@ export interface RoomQuest {
   completedAt: string | null;
 }
 
+export type WildAnimalSpecies = 'bird' | 'squirrel' | 'dog' | 'cat' | 'raccoon';
+
+export interface WildAnimalSpec {
+  key: string;
+  species: WildAnimalSpecies;
+  name: string;
+  unlockLevel: number;
+  visualSummary: string;
+  visualTraits: string[];
+  palette: {
+    primary: string;
+    secondary: string;
+    detail: string;
+    accent: string;
+  };
+  homePos: { x: number; z: number };
+}
+
+export interface TamedAnimalRecord {
+  id: string;
+  roomId: string;
+  animalKey: string;
+  species: WildAnimalSpecies;
+  nickname: string;
+  description: string;
+  tamedByUserId: string;
+  tamedByName?: string;
+  tamedAt: string;
+}
+
 export interface WorldProgressionState {
   level: number;
   stageName: string;
@@ -209,6 +240,9 @@ export interface WorldStateResponse {
   todayEntries: JournalEntry[];
   strokes: CanvasStroke[];
   progression: WorldProgressionState;
+  tamedAnimals?: TamedAnimalRecord[];
+  animalAffections?: Record<string, number>;
+  userPoints?: number;
   userSubmittedToday: boolean;
 }
 

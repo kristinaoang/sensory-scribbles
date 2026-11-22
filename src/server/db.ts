@@ -16,7 +16,9 @@ import type {
   RoomQuest,
   SensoryWorldSpec,
   StrokeData,
+  TamedAnimalRecord,
   WeeklyAccuracyBucket,
+  WildAnimalSpecies,
   WorldProgressionState,
 } from '../types';
 
@@ -58,6 +60,7 @@ export async function initDatabase(): Promise<void> {
       await pool.query(sql);
     }
     await pool.query('ALTER TABLE canvas_strokes ADD COLUMN IF NOT EXISTS chapter_number INTEGER NOT NULL DEFAULT 1');
+    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS affection_points INTEGER NOT NULL DEFAULT 0');
     return;
   }
 
@@ -76,6 +79,7 @@ export async function initDatabase(): Promise<void> {
       id TEXT PRIMARY KEY,
       display_name TEXT NOT NULL,
       avatar_color TEXT NOT NULL,
+      affection_points INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
 
@@ -181,6 +185,31 @@ export async function initDatabase(): Promise<void> {
     );
 
     CREATE INDEX IF NOT EXISTS idx_room_quests_room ON room_quests(room_id, chapter_number ASC);
+
+    CREATE TABLE IF NOT EXISTS tamed_animals (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL REFERENCES rooms(id),
+      animal_key TEXT NOT NULL,
+      species TEXT NOT NULL,
+      nickname TEXT NOT NULL,
+      description TEXT NOT NULL,
+      tamed_by_user_id TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      UNIQUE(room_id, animal_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tamed_animals_room ON tamed_animals(room_id, created_at ASC);
+
+    CREATE TABLE IF NOT EXISTS animal_affections (
+      id TEXT PRIMARY KEY,
+      room_id TEXT NOT NULL REFERENCES rooms(id),
+      animal_key TEXT NOT NULL,
+      affection INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      UNIQUE(room_id, animal_key)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_animal_affections_room ON animal_affections(room_id);
   `);
 
   // Safe migration for existing local rooms table if invite_code column was added later
@@ -198,6 +227,12 @@ export async function initDatabase(): Promise<void> {
   const strokeCols = db.prepare("PRAGMA table_info('canvas_strokes')").all() as Array<{ name: string }>;
   if (!strokeCols.some((c) => c.name === 'chapter_number')) {
     db.exec('ALTER TABLE canvas_strokes ADD COLUMN chapter_number INTEGER NOT NULL DEFAULT 1');
+  }
+
+  // Safe migration for existing local users table if affection_points column was added later
+  const userCols = db.prepare("PRAGMA table_info('users')").all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === 'affection_points')) {
+    db.exec('ALTER TABLE users ADD COLUMN affection_points INTEGER NOT NULL DEFAULT 0');
   }
 }
 
@@ -227,6 +262,7 @@ function mapUser(row: any): AnonymousUser {
     id: row.id,
     displayName: row.display_name,
     avatarColor: row.avatar_color,
+    affectionPoints: Math.max(0, Number(row.affection_points ?? 0)),
     createdAt: new Date(row.created_at).toISOString(),
   };
 }
@@ -366,10 +402,11 @@ export async function createUser(displayName: string, avatarColor: string, expli
   }
   getSqlite()
     .prepare(
-      'INSERT INTO users (id, display_name, avatar_color, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, avatar_color = excluded.avatar_color',
+      'INSERT INTO users (id, display_name, avatar_color, affection_points, created_at) VALUES (?, ?, ?, 0, ?) ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name, avatar_color = excluded.avatar_color',
     )
     .run(id, cleanName, cleanColor, now);
-  return { id, displayName: cleanName, avatarColor: cleanColor, createdAt: now };
+  const saved = await getUserById(id);
+  return saved ?? { id, displayName: cleanName, avatarColor: cleanColor, affectionPoints: 0, createdAt: now };
 }
 
 export async function getPromptForDate(promptDate: string): Promise<Prompt | null> {
@@ -1644,4 +1681,225 @@ export async function syncLegacyQuestsToTemplates(): Promise<void> {
     }
   }
 }
+
+function mapTamedAnimal(row: any): TamedAnimalRecord {
+  return {
+    id: row.id,
+    roomId: row.room_id,
+    animalKey: row.animal_key,
+    species: row.species as WildAnimalSpecies,
+    nickname: row.nickname,
+    description: row.description,
+    tamedByUserId: row.tamed_by_user_id,
+    tamedByName: row.tamed_by_name ?? undefined,
+    tamedAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+export async function getTamedAnimalsForRoom(roomId: string): Promise<TamedAnimalRecord[]> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT t.*, u.display_name AS tamed_by_name
+       FROM tamed_animals t
+       LEFT JOIN users u ON u.id = t.tamed_by_user_id
+       WHERE t.room_id = $1
+       ORDER BY t.created_at ASC`,
+      [roomId],
+    );
+    return rows.map(mapTamedAnimal);
+  }
+  const rows = getSqlite()
+    .prepare(
+      `SELECT t.*, u.display_name AS tamed_by_name
+       FROM tamed_animals t
+       LEFT JOIN users u ON u.id = t.tamed_by_user_id
+       WHERE t.room_id = ?
+       ORDER BY t.created_at ASC`,
+    )
+    .all(roomId);
+  return rows.map(mapTamedAnimal);
+}
+
+export async function upsertTamedAnimal(params: {
+  roomId: string;
+  animalKey: string;
+  species: WildAnimalSpecies;
+  nickname: string;
+  description: string;
+  tamedByUserId: string;
+}): Promise<TamedAnimalRecord> {
+  const id = `ta_${crypto.randomUUID().slice(0, 10)}`;
+  const now = new Date().toISOString();
+  const cleanNickname = params.nickname.trim().slice(0, 28);
+  const cleanDescription = params.description.trim().slice(0, 180);
+
+  if (USE_POSTGRES) {
+    await getPg().query(
+      `INSERT INTO tamed_animals (id, room_id, animal_key, species, nickname, description, tamed_by_user_id, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (room_id, animal_key) DO UPDATE SET
+         nickname = EXCLUDED.nickname,
+         description = EXCLUDED.description,
+         tamed_by_user_id = EXCLUDED.tamed_by_user_id,
+         created_at = EXCLUDED.created_at`,
+      [id, params.roomId, params.animalKey, params.species, cleanNickname, cleanDescription, params.tamedByUserId, now],
+    );
+    const { rows } = await getPg().query(
+      `SELECT t.*, u.display_name AS tamed_by_name
+       FROM tamed_animals t LEFT JOIN users u ON u.id = t.tamed_by_user_id
+       WHERE t.room_id = $1 AND t.animal_key = $2 LIMIT 1`,
+      [params.roomId, params.animalKey],
+    );
+    return mapTamedAnimal(rows[0]);
+  }
+
+  getSqlite()
+    .prepare(
+      `INSERT INTO tamed_animals (id, room_id, animal_key, species, nickname, description, tamed_by_user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(room_id, animal_key) DO UPDATE SET
+         nickname = excluded.nickname,
+         description = excluded.description,
+         tamed_by_user_id = excluded.tamed_by_user_id,
+         created_at = excluded.created_at`,
+    )
+    .run(id, params.roomId, params.animalKey, params.species, cleanNickname, cleanDescription, params.tamedByUserId, now);
+
+  const row = getSqlite()
+    .prepare(
+      `SELECT t.*, u.display_name AS tamed_by_name
+       FROM tamed_animals t LEFT JOIN users u ON u.id = t.tamed_by_user_id
+       WHERE t.room_id = ? AND t.animal_key = ? LIMIT 1`,
+    )
+    .get(params.roomId, params.animalKey);
+  return mapTamedAnimal(row);
+}
+
+export async function addUserPoints(userId: string, delta: number): Promise<number> {
+  const safeDelta = Math.max(0, Math.floor(delta));
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      'UPDATE users SET affection_points = GREATEST(0, COALESCE(affection_points, 0) + $1) WHERE id = $2 RETURNING affection_points',
+      [safeDelta, userId],
+    );
+    return Number(rows[0]?.affection_points ?? 0);
+  }
+  getSqlite()
+    .prepare('UPDATE users SET affection_points = MAX(0, COALESCE(affection_points, 0) + ?) WHERE id = ?')
+    .run(safeDelta, userId);
+  const row = getSqlite().prepare('SELECT affection_points FROM users WHERE id = ?').get(userId) as { affection_points?: number } | undefined;
+  return Number(row?.affection_points ?? 0);
+}
+
+export async function getAnimalAffectionsForRoom(roomId: string): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query('SELECT animal_key, affection FROM animal_affections WHERE room_id = $1', [roomId]);
+    for (const r of rows) {
+      result[r.animal_key] = Number(r.affection ?? 0);
+    }
+    return result;
+  }
+  const rows = getSqlite().prepare('SELECT animal_key, affection FROM animal_affections WHERE room_id = ?').all(roomId) as Array<{
+    animal_key: string;
+    affection: number;
+  }>;
+  for (const r of rows) {
+    result[r.animal_key] = Number(r.affection ?? 0);
+  }
+  return result;
+}
+
+export async function spendPointsForAnimalPet(params: {
+  roomId: string;
+  userId: string;
+  animalKey: string;
+  cost: number;
+  affectionGain: number;
+}): Promise<{ ok: boolean; insufficient?: boolean; affectionPoints: number; animalAffection: number }> {
+  const safeCost = Math.max(1, Math.floor(params.cost));
+  const safeGain = Math.max(1, Math.floor(params.affectionGain));
+  const now = new Date().toISOString();
+
+  if (USE_POSTGRES) {
+    const client = await getPg().connect();
+    try {
+      await client.query('BEGIN');
+      const userRes = await client.query('SELECT affection_points FROM users WHERE id = $1 FOR UPDATE', [params.userId]);
+      const currentPts = Number(userRes.rows[0]?.affection_points ?? 0);
+      if (currentPts < safeCost) {
+        const affRes = await client.query('SELECT affection FROM animal_affections WHERE room_id = $1 AND animal_key = $2', [
+          params.roomId,
+          params.animalKey,
+        ]);
+        await client.query('ROLLBACK');
+        return {
+          ok: false,
+          insufficient: true,
+          affectionPoints: currentPts,
+          animalAffection: Number(affRes.rows[0]?.affection ?? 0),
+        };
+      }
+      const nextPtsRes = await client.query(
+        'UPDATE users SET affection_points = affection_points - $1 WHERE id = $2 RETURNING affection_points',
+        [safeCost, params.userId],
+      );
+      const id = `aff_${crypto.randomUUID().slice(0, 10)}`;
+      const affUpsert = await client.query(
+        `INSERT INTO animal_affections (id, room_id, animal_key, affection, updated_at)
+         VALUES ($1, $2, $3, LEAST(100, $4), $5)
+         ON CONFLICT (room_id, animal_key) DO UPDATE SET
+           affection = LEAST(100, animal_affections.affection + $4),
+           updated_at = EXCLUDED.updated_at
+         RETURNING affection`,
+        [id, params.roomId, params.animalKey, safeGain, now],
+      );
+      await client.query('COMMIT');
+      return {
+        ok: true,
+        affectionPoints: Number(nextPtsRes.rows[0]?.affection_points ?? 0),
+        animalAffection: Number(affUpsert.rows[0]?.affection ?? safeGain),
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  const db = getSqlite();
+  const tx = db.transaction(() => {
+    const userRow = db.prepare('SELECT affection_points FROM users WHERE id = ?').get(params.userId) as
+      | { affection_points?: number }
+      | undefined;
+    const currentPts = Number(userRow?.affection_points ?? 0);
+    const existingAffRow = db
+      .prepare('SELECT affection FROM animal_affections WHERE room_id = ? AND animal_key = ?')
+      .get(params.roomId, params.animalKey) as { affection?: number } | undefined;
+    const currentAff = Number(existingAffRow?.affection ?? 0);
+
+    if (currentPts < safeCost) {
+      return { ok: false, insufficient: true, affectionPoints: currentPts, animalAffection: currentAff };
+    }
+
+    const nextPts = currentPts - safeCost;
+    db.prepare('UPDATE users SET affection_points = ? WHERE id = ?').run(nextPts, params.userId);
+
+    const nextAff = Math.min(100, currentAff + safeGain);
+    const id = `aff_${crypto.randomUUID().slice(0, 10)}`;
+    db.prepare(
+      `INSERT INTO animal_affections (id, room_id, animal_key, affection, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(room_id, animal_key) DO UPDATE SET
+         affection = MIN(100, animal_affections.affection + ?),
+         updated_at = excluded.updated_at`,
+    ).run(id, params.roomId, params.animalKey, nextAff, now, safeGain);
+
+    return { ok: true, affectionPoints: nextPts, animalAffection: nextAff };
+  });
+
+  return tx();
+}
+
 

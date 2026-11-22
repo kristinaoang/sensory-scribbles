@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   display_name TEXT NOT NULL,
   avatar_color TEXT NOT NULL,
+  affection_points INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -134,6 +135,33 @@ CREATE TABLE IF NOT EXISTS room_quests (
 );
 
 CREATE INDEX IF NOT EXISTS idx_room_quests_room ON room_quests (room_id, chapter_number ASC);
+
+-- Tamed Wild Animal Companions per room
+CREATE TABLE IF NOT EXISTS tamed_animals (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL REFERENCES rooms(id),
+  animal_key TEXT NOT NULL,
+  species TEXT NOT NULL,
+  nickname TEXT NOT NULL,
+  description TEXT NOT NULL,
+  tamed_by_user_id TEXT NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(room_id, animal_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tamed_animals_room ON tamed_animals (room_id, created_at ASC);
+
+-- Persistent animal affection levels per room
+CREATE TABLE IF NOT EXISTS animal_affections (
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL REFERENCES rooms(id),
+  animal_key TEXT NOT NULL,
+  affection INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(room_id, animal_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_animal_affections_room ON animal_affections (room_id);
 
 -- Continuous Aggregate 1: Daily entry counts per room using time_bucket('1 day', created_at)
 CREATE MATERIALIZED VIEW IF NOT EXISTS daily_room_entry_counts

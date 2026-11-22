@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 import { WebSocket, WebSocketServer } from 'ws';
 import { runMastraNightlyWorkflow } from './src/mastra/nightlyWorkflow';
 import {
+  addUserPoints,
   claimAdminPassword,
   createRoom,
   createUser,
@@ -16,6 +17,7 @@ import {
   getAllEntriesForRoom,
   getAllPrompts,
   getAllRooms,
+  getAnimalAffectionsForRoom,
   getAvailableDatesForRoom,
   getCanvasStrokesForRoom,
   getDailyRoomEntryCounts,
@@ -28,6 +30,7 @@ import {
   getRoomById,
   getRoomByInviteCode,
   getRoomProgression,
+  getTamedAnimalsForRoom,
   getUserById,
   getUserRoomStreak,
   getUserWeeklyMinigameAccuracy,
@@ -40,19 +43,28 @@ import {
   isPostgresMode,
   recordMinigameEvent,
   setEntryFlagged,
+  spendPointsForAnimalPet,
   updateEntrySolanaAnchor,
   updateRoomSolana,
   upsertPrompt,
+  upsertTamedAnimal,
   verifyAdminPassword,
 } from './src/server/db';
 import {
   deriveSensoryWorldSpec,
+  evaluateAnimalDescription,
   formatGeminiErrorMessage,
   moderateSentence,
   transcribeSpokenAudio,
 } from './src/server/gemini';
 import { seedCanvasStrokesIfEmpty, seedDemoDataIfEmpty, seedQuestsIfEmpty } from './src/server/seed';
 import { anchorEntryToSolanaDevnet, getSolanaConfigStatus } from './src/server/solana';
+import {
+  PET_TOOLS,
+  POINTS_PER_PROMPT_ANSWER,
+  getJournalAnimalOrder,
+  getWildAnimalByKey,
+} from './src/shared/wildAnimals';
 import type { StrokeData } from './src/types';
 
 dotenv.config();
@@ -419,14 +431,18 @@ async function startServer() {
         return;
       }
 
-      const [prompt, entries, todayEntries, strokes, progression, userSubmittedToday] = await Promise.all([
-        getPromptForDate(today),
-        getAllEntriesForRoom(room.id, 36),
-        getEntriesForRoomAndDate(room.id, today, false),
-        getCanvasStrokesForRoom(room.id),
-        getRoomProgression(room.id),
-        userId ? hasUserSubmittedOnDate(room.id, userId, today) : Promise.resolve(false),
-      ]);
+      const [prompt, entries, todayEntries, strokes, progression, tamedAnimals, animalAffections, userSubmittedToday, activeUser] =
+        await Promise.all([
+          getPromptForDate(today),
+          getAllEntriesForRoom(room.id, 36),
+          getEntriesForRoomAndDate(room.id, today, false),
+          getCanvasStrokesForRoom(room.id),
+          getRoomProgression(room.id),
+          getTamedAnimalsForRoom(room.id),
+          getAnimalAffectionsForRoom(room.id),
+          userId ? hasUserSubmittedOnDate(room.id, userId, today) : Promise.resolve(false),
+          userId ? getUserById(userId) : Promise.resolve(null),
+        ]);
 
       res.json({
         room,
@@ -436,10 +452,191 @@ async function startServer() {
         todayEntries,
         strokes,
         progression,
+        tamedAnimals,
+        animalAffections,
+        userPoints: activeUser?.affectionPoints ?? 0,
         userSubmittedToday,
       });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to load 3D world state.' });
+    }
+  });
+
+  // Spend Care Points earned from prompt answers to pet & raise affection with an island animal
+  app.post('/api/world/animals/pet', async (req, res) => {
+    try {
+      const roomId = String(req.body?.roomId || '');
+      const userId = String(req.body?.userId || '');
+      const animalKey = String(req.body?.animalKey || '').trim();
+      const toolId = String(req.body?.toolId || '').trim();
+
+      if (!roomId || !userId || !animalKey || !toolId) {
+        res.status(400).json({ error: 'roomId, userId, animalKey, and toolId are required.' });
+        return;
+      }
+
+      const animalSpec = getWildAnimalByKey(animalKey);
+      if (!animalSpec) {
+        res.status(404).json({ error: 'Unknown animal.' });
+        return;
+      }
+
+      const tool = PET_TOOLS.find((t) => t.id === toolId);
+      if (!tool) {
+        res.status(400).json({ error: 'Unknown petting tool.' });
+        return;
+      }
+
+      const [room, user] = await Promise.all([getRoomById(roomId), getUserById(userId)]);
+      if (!room || !user) {
+        res.status(404).json({ error: 'Room or user profile not found.' });
+        return;
+      }
+
+      const result = await spendPointsForAnimalPet({
+        roomId: room.id,
+        userId: user.id,
+        animalKey: animalSpec.key,
+        cost: tool.pointCost,
+        affectionGain: tool.affectionGain,
+      });
+
+      if (!result.ok) {
+        res.status(400).json({
+          error: `Need ${tool.pointCost} Care Points for ${tool.label}. Answer a prompt to earn +${POINTS_PER_PROMPT_ANSWER} pts!`,
+          insufficientPoints: true,
+          affectionPoints: result.affectionPoints,
+          requiredPoints: tool.pointCost,
+        });
+        return;
+      }
+
+      broadcastToRoom(room.id, {
+        type: 'animal:petted',
+        animalKey: animalSpec.key,
+        animalAffection: result.animalAffection,
+        toolId: tool.id,
+      });
+
+      res.json({
+        ok: true,
+        affectionPoints: result.affectionPoints,
+        animalAffection: result.animalAffection,
+        pointsSpent: tool.pointCost,
+        tool,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to pet animal.' });
+    }
+  });
+
+  // Tame a wild 3D island animal by describing how it looks
+  app.post('/api/world/animals/tame', async (req, res) => {
+    try {
+      const roomId = String(req.body?.roomId || '');
+      const userId = String(req.body?.userId || '');
+      const animalKey = String(req.body?.animalKey || '').trim();
+      const description = String(req.body?.description || '').trim();
+      const rawNickname = String(req.body?.nickname || '').trim();
+
+      if (!roomId || !userId || !animalKey) {
+        res.status(400).json({ error: 'roomId, userId, and animalKey are required.' });
+        return;
+      }
+
+      const animalSpec = getWildAnimalByKey(animalKey);
+      if (!animalSpec) {
+        res.status(404).json({ error: 'Unknown wild animal.' });
+        return;
+      }
+
+      if (!description || description.length < 5 || description.length > 180) {
+        res.status(400).json({ error: 'Please describe how the animal looks (5–180 characters).' });
+        return;
+      }
+
+      const room = await getRoomById(roomId);
+      if (!room) {
+        res.status(404).json({ error: 'Room not found.' });
+        return;
+      }
+
+      const progression = await getRoomProgression(room.id);
+      const journalOrder = getJournalAnimalOrder(animalKey);
+      if (journalOrder !== null) {
+        const roomEntries = await getAllEntriesForRoom(room.id, 100);
+        const nonDemoCount = roomEntries.filter((e) => !e.isDemo).length;
+        if (nonDemoCount < journalOrder) {
+          res.status(403).json({
+            error: `Write ${journalOrder} journal ${journalOrder === 1 ? 'entry' : 'entries'} to welcome ${animalSpec.name}.`,
+          });
+          return;
+        }
+      } else if (progression.level < animalSpec.unlockLevel) {
+        res.status(403).json({
+          error: `${animalSpec.name} arrives at Stage ${animalSpec.unlockLevel}.`,
+        });
+        return;
+      }
+
+      let user = await getUserById(userId);
+      if (!user) {
+        user = await createUser(String(req.body?.displayName || 'quiet-guest'), '#2E7D5B', userId);
+      }
+
+      // Reuse safety moderation on appearance description + optional nickname
+      const textToModerate = rawNickname ? `${rawNickname}: ${description}` : description;
+      if (textToModerate.length <= 140) {
+        try {
+          const mod = await moderateSentence(textToModerate);
+          if (!mod.allowed) {
+            res.status(422).json({ error: mod.reason || 'Please keep descriptions kind and free of links or personal info.' });
+            return;
+          }
+        } catch (modErr: any) {
+          res.status(503).json({
+            error: formatGeminiErrorMessage(modErr, 'Gemini service unavailable. Check GEMINI_API_KEY in Settings > Secrets.'),
+          });
+          return;
+        }
+      }
+
+      let evalResult;
+      try {
+        evalResult = await evaluateAnimalDescription(animalSpec, description);
+      } catch (gemErr: any) {
+        res.status(503).json({
+          error: formatGeminiErrorMessage(gemErr, 'Gemini service unavailable. Check GEMINI_API_KEY in Settings > Secrets.'),
+        });
+        return;
+      }
+
+      if (!evalResult.matched) {
+        res.json({
+          tamed: false,
+          feedback: evalResult.feedback,
+        });
+        return;
+      }
+
+      const tamedAnimal = await upsertTamedAnimal({
+        roomId: room.id,
+        animalKey: animalSpec.key,
+        species: animalSpec.species,
+        nickname: rawNickname || animalSpec.name,
+        description,
+        tamedByUserId: user.id,
+      });
+
+      broadcastToRoom(room.id, { type: 'animal:tamed', tamedAnimal });
+
+      res.status(201).json({
+        tamed: true,
+        tamedAnimal,
+        feedback: evalResult.feedback,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to tame wild animal.' });
     }
   });
 
@@ -536,6 +733,7 @@ async function startServer() {
       });
 
       const { progression, justExpanded } = await incrementQuestProgress(room.id, { answers: 1, strokes: 1 });
+      const updatedPoints = await addUserPoints(user.id, POINTS_PER_PROMPT_ANSWER);
       const enrichedEntry = {
         ...created,
         authorDisplayName: user.displayName,
@@ -557,6 +755,8 @@ async function startServer() {
         canvasStroke: createdCanvasStroke,
         progression,
         justExpanded,
+        awardedPoints: POINTS_PER_PROMPT_ANSWER,
+        affectionPoints: updatedPoints,
       });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to submit prompt answer.' });
@@ -695,6 +895,7 @@ async function startServer() {
         answers: 1,
         strokes: req.body?.publishToCanvas !== false ? 1 : 0,
       });
+      const updatedPoints = await addUserPoints(user.id, POINTS_PER_PROMPT_ANSWER);
 
       const enrichedEntry = {
         ...created,
@@ -717,6 +918,8 @@ async function startServer() {
         solana: solanaResult,
         progression,
         justExpanded,
+        awardedPoints: POINTS_PER_PROMPT_ANSWER,
+        affectionPoints: updatedPoints,
       });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to submit entry.' });
@@ -1031,6 +1234,7 @@ async function startServer() {
       });
 
       const { progression, justExpanded } = await incrementQuestProgress(room.id, { answers: 1, strokes: 1 });
+      const updatedPoints = await addUserPoints(user.id, POINTS_PER_PROMPT_ANSWER);
       const enrichedEntry = {
         ...createdEntry,
         authorDisplayName: user.displayName,
@@ -1047,7 +1251,14 @@ async function startServer() {
         stroke: created,
       });
 
-      res.status(201).json({ stroke: created, entry: enrichedEntry, progression, justExpanded });
+      res.status(201).json({
+        stroke: created,
+        entry: enrichedEntry,
+        progression,
+        justExpanded,
+        awardedPoints: POINTS_PER_PROMPT_ANSWER,
+        affectionPoints: updatedPoints,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to publish stroke to shared canvas.' });
     }
