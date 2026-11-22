@@ -16,6 +16,9 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
   const [helpLine, setHelpLine] = useState('Help has not been used yet.');
   const [engineLabel, setEngineLabel] = useState('');
   const [loading, setLoading] = useState(true);
+  const [recapText, setRecapText] = useState('');
+  const [mailNote, setMailNote] = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -33,10 +36,35 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
       .finally(() => {
         if (active) setLoading(false);
       });
+    fetch(`/api/parent/recap?userId=${encodeURIComponent(userId)}&roomCode=${encodeURIComponent(roomCode)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!active) return;
+        setRecapText(typeof data.text === 'string' ? data.text : '');
+        if (data.mailConfigured === false) setMailNote('mail is not configured');
+      })
+      .catch(() => {
+        if (active) setMailNote('mail is not configured');
+      });
     return () => {
       active = false;
     };
   }, [userId, roomCode, refreshKey]);
+
+  const sendRecap = () => {
+    setSending(true);
+    fetch('/api/parent/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, roomCode }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setMailNote(typeof data.message === 'string' ? data.message : 'mail is not configured');
+      })
+      .catch(() => setMailNote('mail is not configured'))
+      .finally(() => setSending(false));
+  };
 
   const totalAttempts = weeklyAccuracy.reduce((acc, b) => acc + b.totalAttempts, 0);
   const totalCorrect = weeklyAccuracy.reduce((acc, b) => acc + b.correctCount, 0);
@@ -62,6 +90,27 @@ export const StatsView: React.FC<StatsViewProps> = ({ userId, roomCode, refreshK
 
       {/* Room Contribution Streak Counter */}
       <StreakCounter streak={streak} roomCode={roomCode} loading={loading} />
+
+      <div className="rounded-2xl border border-[#E5DEC9] dark:border-[#3D4978] bg-white dark:bg-[#21294A] p-4 space-y-3">
+        <p className="text-sm whitespace-pre-line text-[#1F2A3C] dark:text-slate-100">
+          {recapText || 'Practice recap'}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={sendRecap}
+            disabled={sending}
+            className="min-h-[40px] px-4 py-1.5 rounded-full bg-[#F7C6CF] hover:bg-[#F2B1BE] text-[#43202A] text-sm font-bold disabled:opacity-60"
+          >
+            Email parent recap
+          </button>
+          {mailNote && (
+            <p className="text-sm text-[#4C5568] dark:text-[#CBD5EB]" role="status">
+              {mailNote}
+            </p>
+          )}
+        </div>
+      </div>
 
       <p
         data-testid="help-usage-line"

@@ -1670,6 +1670,13 @@ async function ensureGuideSchema(): Promise<void> {
       );
       ALTER TABLE entries ADD COLUMN IF NOT EXISTS quest_id TEXT;
       ALTER TABLE canvas_strokes ADD COLUMN IF NOT EXISTS quest_id TEXT;
+      CREATE TABLE IF NOT EXISTS safety_recaps (
+        id TEXT PRIMARY KEY,
+        run_date TEXT NOT NULL,
+        passed BOOLEAN NOT NULL,
+        summary TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL
+      );
     `);
     return;
   }
@@ -1688,6 +1695,13 @@ async function ensureGuideSchema(): Promise<void> {
       quest_id TEXT PRIMARY KEY,
       prompt TEXT NOT NULL,
       generated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS safety_recaps (
+      id TEXT PRIMARY KEY,
+      run_date TEXT NOT NULL,
+      passed INTEGER NOT NULL,
+      summary TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `);
   for (const table of ['entries', 'canvas_strokes']) {
@@ -1867,5 +1881,89 @@ export async function setCampusWanderChoice(roomId: string, userId: string, plac
        ON CONFLICT(room_id, user_id) DO UPDATE SET place_id = excluded.place_id, created_at = excluded.created_at`,
     )
     .run(roomId, userId, placeId, now);
+}
+
+export async function listTodayEntrySentences(day: string): Promise<string[]> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT sentence FROM entries WHERE entry_date = $1::date AND flagged = FALSE ORDER BY created_at ASC`,
+      [day],
+    );
+    return rows.map((row) => String(row.sentence || ''));
+  }
+  const rows = getSqlite()
+    .prepare(`SELECT sentence FROM entries WHERE entry_date = ? AND flagged = 0 ORDER BY created_at ASC`)
+    .all(day) as Array<{ sentence: string }>;
+  return rows.map((row) => String(row.sentence || ''));
+}
+
+export async function latestEntrySentence(userId: string, roomId: string): Promise<string | null> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT sentence FROM entries
+       WHERE user_id = $1 AND room_id = $2 AND flagged = FALSE
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId, roomId],
+    );
+    return rows[0]?.sentence ? String(rows[0].sentence) : null;
+  }
+  const row = getSqlite()
+    .prepare(
+      `SELECT sentence FROM entries
+       WHERE user_id = ? AND room_id = ? AND flagged = 0
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(userId, roomId) as { sentence?: string } | undefined;
+  return row?.sentence ? String(row.sentence) : null;
+}
+
+export async function saveSafetyRecap(recap: {
+  id: string;
+  runDate: string;
+  passed: boolean;
+  summary: string;
+  createdAt: string;
+}): Promise<void> {
+  if (USE_POSTGRES) {
+    await getPg().query(
+      `INSERT INTO safety_recaps (id, run_date, passed, summary, created_at) VALUES ($1, $2, $3, $4, $5)`,
+      [recap.id, recap.runDate, recap.passed, recap.summary, recap.createdAt],
+    );
+    return;
+  }
+  getSqlite()
+    .prepare(`INSERT INTO safety_recaps (id, run_date, passed, summary, created_at) VALUES (?, ?, ?, ?, ?)`)
+    .run(recap.id, recap.runDate, recap.passed ? 1 : 0, recap.summary, recap.createdAt);
+}
+
+export async function latestSafetyRecap(): Promise<{
+  runDate: string;
+  passed: boolean;
+  summary: string;
+  createdAt: string;
+} | null> {
+  if (USE_POSTGRES) {
+    const { rows } = await getPg().query(
+      `SELECT run_date, passed, summary, created_at FROM safety_recaps ORDER BY created_at DESC LIMIT 1`,
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      runDate: String(row.run_date).slice(0, 10),
+      passed: Boolean(row.passed),
+      summary: String(row.summary),
+      createdAt: new Date(row.created_at).toISOString(),
+    };
+  }
+  const row = getSqlite()
+    .prepare(`SELECT run_date, passed, summary, created_at FROM safety_recaps ORDER BY created_at DESC LIMIT 1`)
+    .get() as { run_date: string; passed: number; summary: string; created_at: string } | undefined;
+  if (!row) return null;
+  return {
+    runDate: String(row.run_date).slice(0, 10),
+    passed: row.passed === 1,
+    summary: row.summary,
+    createdAt: row.created_at,
+  };
 }
 

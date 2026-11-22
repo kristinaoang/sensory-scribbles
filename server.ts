@@ -56,7 +56,9 @@ import {
   transcribeSpokenAudio,
 } from './src/server/gemini';
 import { mountCampusJournalRoutes } from './src/server/campusJournal';
+import { readLatestSafetyRecap, runDailySafetyCheck } from './src/server/dailySafety';
 import { mountGuideRoutes } from './src/server/guideRoutes';
+import { buildParentRecap, mailSettings, sendParentRecap } from './src/server/parentMail';
 import { seedCanvasStrokesIfEmpty, seedDemoDataIfEmpty, seedQuestsIfEmpty } from './src/server/seed';
 import { anchorEntryToSolanaDevnet, getSolanaConfigStatus } from './src/server/solana';
 import type { StrokeData } from './src/types';
@@ -132,6 +134,11 @@ async function startServer() {
   await seedDemoDataIfEmpty(false);
   await seedCanvasStrokesIfEmpty();
   await seedQuestsIfEmpty();
+  try {
+    await runDailySafetyCheck();
+  } catch (err) {
+    console.error('Daily safety check did not finish', err instanceof Error ? err.name : 'error');
+  }
 
   const app = express();
   const httpServer = http.createServer(app);
@@ -800,6 +807,63 @@ async function startServer() {
       res.status(201).json({ event: ev });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || 'Failed to record minigame result.' });
+    }
+  });
+
+  app.get('/api/safety/latest', async (_req, res) => {
+    try {
+      const recap = await readLatestSafetyRecap();
+      res.json({ recap });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to read the safety recap.' });
+    }
+  });
+
+  app.post('/api/safety/daily', async (_req, res) => {
+    try {
+      const recap = await runDailySafetyCheck();
+      res.json({ recap });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to run the safety check.' });
+    }
+  });
+
+  app.get('/api/parent/recap', async (req, res) => {
+    try {
+      const userId = String(req.query.userId || '');
+      const roomCode = String(req.query.roomCode || 'CEDAR-402').trim().toUpperCase();
+      const room = await getRoomByCode(roomCode);
+      if (!userId || !room) {
+        res.status(400).json({ error: 'A room and child are required.' });
+        return;
+      }
+      const text = await buildParentRecap(userId, room.id);
+      const mail = mailSettings();
+      res.json({ text, mailConfigured: mail.configured });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || 'Failed to build the recap.' });
+    }
+  });
+
+  app.post('/api/parent/email', async (req, res) => {
+    try {
+      const userId = String(req.body?.userId || '');
+      const roomCode = String(req.body?.roomCode || 'CEDAR-402').trim().toUpperCase();
+      const room = await getRoomByCode(roomCode);
+      if (!userId || !room) {
+        res.status(400).json({ error: 'A room and child are required.' });
+        return;
+      }
+      const mail = mailSettings();
+      if (!mail.configured) {
+        res.status(200).json({ sent: false, configured: false, message: 'mail is not configured' });
+        return;
+      }
+      const text = await buildParentRecap(userId, room.id);
+      const result = await sendParentRecap(text);
+      res.status(result.sent ? 200 : 502).json(result);
+    } catch (err: any) {
+      res.status(500).json({ sent: false, configured: true, message: err?.message || 'The recap was not sent.' });
     }
   });
 
