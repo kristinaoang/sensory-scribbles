@@ -76,6 +76,25 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
     if (typeof window === 'undefined') return false;
     return window.sessionStorage.getItem(`ss_area_journal_hidden:${roomId}:${userId}`) === '1';
   });
+  const [tucked, setTucked] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('ss-quest-tucked') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleTucked = () => {
+    setTucked((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem('ss-quest-tucked', next ? '1' : '0');
+      } catch {
+        /* the tab still works for this visit */
+      }
+      return next;
+    });
+  };
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
@@ -240,12 +259,27 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
     }
   };
 
+  const questTab = (
+    <button
+      type="button"
+      data-testid="quest-tab"
+      aria-expanded={!tucked}
+      onClick={toggleTucked}
+      className="pointer-events-auto inline-flex min-h-[44px] w-fit cursor-pointer items-center rounded-full border border-[#E5DEC9] bg-[#F8F4EA] px-4 font-sans text-sm font-bold text-[#1F2A3C] shadow-md"
+    >
+      {tucked ? 'Quest' : 'Hide quest'}
+    </button>
+  );
+
   if (!view) {
     return (
-      <div className="pointer-events-none absolute left-3 top-3 z-10 sm:left-4 sm:top-4">
-        <section className="pointer-events-auto w-[min(22rem,calc(100vw-2rem))] rounded-3xl border border-[#E5DEC9] bg-[#F8F4EA]/95 p-4 text-sm text-[#4C5568] shadow-md">
-          Opening the green…
-        </section>
+      <div className="pointer-events-none absolute left-3 top-3 z-10 flex flex-col gap-2 sm:left-4 sm:top-4">
+        {questTab}
+        {!tucked ? (
+          <section className="pointer-events-auto w-[min(22rem,calc(100vw-2rem))] rounded-3xl border border-[#E5DEC9] bg-[#F8F4EA]/95 p-4 font-sans text-sm text-[#4C5568] shadow-md">
+            Opening the green…
+          </section>
+        ) : null}
       </div>
     );
   }
@@ -256,7 +290,8 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
   return (
     <div className="pointer-events-none absolute inset-0 z-10">
       <div className="pointer-events-none absolute left-3 top-3 flex w-[min(22rem,calc(100%-1.5rem))] flex-col gap-2 sm:left-4 sm:top-4">
-        <section
+        {questTab}
+        {!tucked ? <section
           data-testid="campus-area-journal"
           className="pointer-events-auto max-h-[min(78vh,640px)] overflow-y-auto rounded-3xl border border-[#E5DEC9] bg-[#F8F4EA]/95 p-4 text-[#1F2A3C] shadow-md dark:border-[#3D4978] dark:bg-[#222A4C]/95 dark:text-slate-100"
           aria-label="Campus journal"
@@ -270,7 +305,7 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
                 <p data-testid="campus-welcome" className="mt-1 text-xs leading-snug text-[#2E7D5B] dark:text-[#7CD4C0]">
                   {view.welcome}
                 </p>
-                <p data-testid="campus-prompt" className="mt-2 text-sm leading-snug">
+                <p data-testid="campus-prompt" className="mt-2 font-sans text-sm leading-snug">
                   “{promptText || current.prompt}”
                 </p>
                 <p className="mt-1 text-[11px] leading-snug text-[#4C5568] dark:text-[#CBD5EB]">
@@ -285,11 +320,13 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
                 onPointerDown={(event) => {
                   drawing.current = true;
                   event.currentTarget.setPointerCapture(event.pointerId);
-                  setPoints((prev) => [...prev, pointerPoint(event)]);
+                  const point = pointerPoint(event);
+                  setPoints((prev) => [...prev, point]);
                 }}
                 onPointerMove={(event) => {
-                  if (!drawing.current) return;
-                  setPoints((prev) => [...prev, pointerPoint(event)]);
+                  if (!drawing.current || !event.currentTarget) return;
+                  const point = pointerPoint(event);
+                  setPoints((prev) => [...prev, point]);
                 }}
                 onPointerUp={() => {
                   drawing.current = false;
@@ -316,7 +353,7 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
                   data-testid="campus-save-btn"
                   onClick={save}
                   disabled={saving || (sentence.trim().length === 0 && points.length < 2)}
-                  className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-full bg-[#F7C6CF] px-4 text-sm font-bold text-[#43202A] hover:bg-[#F2B1BE] disabled:opacity-50"
+                  className="inline-flex min-h-[44px] flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-[#F7C6CF] px-4 font-sans text-sm font-bold text-[#43202A] hover:bg-[#F2B1BE] disabled:opacity-50"
                 >
                   <Send className="h-4 w-4" aria-hidden="true" />
                   {saving ? 'Keeping…' : 'Keep this'}
@@ -415,7 +452,7 @@ export const CampusAreaJournal: React.FC<CampusAreaJournalProps> = ({
             {view.parentLine}
             {view.aheadAreaNames.length > 0 ? ` Still ahead: ${view.aheadAreaNames.join(', ')}.` : ''}
           </p>
-        </section>
+        </section> : null}
       </div>
     </div>
   );

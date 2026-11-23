@@ -119,9 +119,40 @@ export async function startCampusGuide({ engine, parentOrigin, userId, roomId })
   enterBtn.textContent = "Tap to enter";
   enter.appendChild(enterBtn);
 
-  const welcome = el("div", "ss-card ss-welcome");
+  const welcome = el("div", "ss-welcome");
   welcome.hidden = true;
   welcome.innerHTML = `<h1 class="ss-welcome-text" data-testid="ss-welcome"></h1>`;
+  let welcomeTicket = 0;
+
+  function presentWelcome(text) {
+    const ticket = ++welcomeTicket;
+    const heading = welcome.querySelector("h1");
+    heading.textContent = text;
+    welcome.classList.remove("ss-welcome-on");
+    welcome.hidden = true;
+    void heading.offsetWidth;
+    welcome.hidden = false;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      heading.removeEventListener("animationend", onEnd);
+      if (ticket !== welcomeTicket) return;
+      welcome.hidden = true;
+      welcome.classList.remove("ss-welcome-on");
+    };
+    function onEnd(event) {
+      if (event.animationName !== "ss-welcome-life") return;
+      finish();
+    }
+    if (reduce) {
+      window.setTimeout(finish, 3000);
+      return;
+    }
+    heading.addEventListener("animationend", onEnd);
+    welcome.classList.add("ss-welcome-on");
+    window.setTimeout(finish, 5000);
+  }
 
   const hintEl = el("div", "ss-card ss-hint");
   hintEl.hidden = true;
@@ -206,9 +237,6 @@ export async function startCampusGuide({ engine, parentOrigin, userId, roomId })
       /* the clip may still be loading */
     }
     stepAudio.play().catch(() => {});
-    if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ source: "ss-guide", action: "footstep" }, parentOrigin);
-    }
   }
 
   function syncMute() {
@@ -257,10 +285,7 @@ export async function startCampusGuide({ engine, parentOrigin, userId, roomId })
   function playLine(id) {
     const text = lines.get(id) || WELCOME;
     currentLine = { id, text };
-    if (id === "welcome") {
-      welcome.hidden = false;
-      welcome.querySelector("h1").textContent = text;
-    }
+    if (id === "welcome") presentWelcome(text);
     if (!entered) return;
     if (voice) {
       voice.pause();
@@ -364,7 +389,6 @@ export async function startCampusGuide({ engine, parentOrigin, userId, roomId })
   enterBtn.addEventListener("click", () => {
     entered = true;
     enter.remove();
-    welcome.hidden = false;
     mini.hidden = false;
     muteBtn.hidden = false;
     slider.hidden = false;
@@ -451,12 +475,7 @@ export async function startCampusGuide({ engine, parentOrigin, userId, roomId })
   helpPanel.querySelector("[data-testid=ss-help-read]").addEventListener("click", () => {
     logHelp("read");
     playLine(currentLine.id);
-    if (currentLine.id === "welcome") {
-      welcome.hidden = false;
-      welcome.querySelector("h1").textContent = lines.get("welcome") || WELCOME;
-    } else {
-      showHint(currentLine.text);
-    }
+    if (currentLine.id !== "welcome") showHint(currentLine.text);
   });
 
   popup.querySelector("[data-testid=ss-quest-yes]").addEventListener("click", () => {

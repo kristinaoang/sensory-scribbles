@@ -119,3 +119,14 @@
   right: -8px;
   transform: skewY(-8deg);
 }
+
+button,
+[role="button"],
+a,
+summary,
+input[type="range"],
+input[type="checkbox"],
+input[type="radio"],
+label[for] {
+  cursor: pointer;
+}
